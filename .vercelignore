@@ -19,7 +19,3 @@ demo2.html
 demo3.html
 demo4.html
 nginx
-Dockerfile
-Dockerfile.prod
-docker-compose.yml
-docker-compose.prod.yml

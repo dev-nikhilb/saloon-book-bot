@@ -5,7 +5,7 @@
   "functions": {
     "app/main.py": {
       "maxDuration": 30,
-      "excludeFiles": "{.env,.env.*,dump.rdb,tests,.venv,.git,.pytest_cache,.ruff_cache,.agents,.claude,nginx,demo*.html}/**"
+      "excludeFiles": "{.env,.env.local,.env.prod,dump.rdb,tests/**,.venv/**,.git/**,.pytest_cache/**,.ruff_cache/**,.agents/**,.claude/**,nginx/**,demo*.html}"
     }
   }
 }
