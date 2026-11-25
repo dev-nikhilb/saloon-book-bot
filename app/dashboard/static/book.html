@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Book Appointment — BookBot</title>
+<style>
+:root {
+  color-scheme: light dark;
+  --bg: #F5F5F7;
+  --surface: #FFFFFF;
+  --surface-secondary: #F2F2F7;
+  --toolbar-bg: rgba(245, 245, 247, 0.76);
+  --label: #1D1D1F;
+  --label-secondary: #6E6E73;
+  --label-tertiary: #86868B;
+  --hairline: rgba(0, 0, 0, 0.07);
+  --separator: rgba(60, 60, 67, 0.12);
+  --blue: #007AFF;
+  --blue-hover: #0066D6;
+  --blue-soft: rgba(0, 122, 255, 0.11);
+  --green: #28CD41;
+  --green-soft: rgba(40, 205, 65, 0.14);
+  --green-text: #1B7F32;
+  --orange: #FF9500;
+  --orange-soft: rgba(255, 149, 0, 0.15);
+  --orange-text: #B25E00;
+  --red-soft: rgba(255, 59, 48, 0.13);
+  --red-text: #C8231B;
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.04), 0 6px 20px rgba(0, 0, 0, 0.04);
+  font: 100%/1.48 -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", system-ui, sans-serif;
+  font-optical-sizing: auto;
+  -webkit-font-smoothing: antialiased;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #000000;
+    --surface: #1C1C1E;
+    --surface-secondary: #2C2C2E;
+    --toolbar-bg: rgba(18, 18, 20, 0.76);
+    --label: #F5F5F7;
+    --label-secondary: #A1A1A6;
+    --label-tertiary: #6E6E73;
+    --hairline: rgba(255, 255, 255, 0.09);
+    --separator: rgba(255, 255, 255, 0.13);
+    --blue: #0A84FF;
+    --blue-hover: #409CFF;
+    --blue-soft: rgba(10, 132, 255, 0.18);
+    --green-soft: rgba(48, 209, 88, 0.18);
+    --green-text: #4CD964;
+    --orange-soft: rgba(255, 159, 10, 0.18);
+    --orange-text: #FFB340;
+    --red-soft: rgba(255, 69, 58, 0.18);
+    --red-text: #FF6961;
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 8px 24px rgba(0, 0, 0, 0.3);
+  }
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; background: var(--bg); color: var(--label); min-height: 100%; -webkit-tap-highlight-color: transparent; }
+.hidden { display: none !important; }
+
+.top-bar {
+  position: sticky; top: 0; z-index: 20;
+  background: var(--toolbar-bg);
+  backdrop-filter: blur(22px) saturate(180%);
+  -webkit-backdrop-filter: blur(22px) saturate(180%);
+  border-bottom: 0.5px solid var(--separator);
+  padding: 0.75rem 1.25rem;
+}
+.top-bar-inner { max-width: 680px; margin: 0 auto; display: flex; align-items: center; justify-content: space-between; }
+
+.container { max-width: 680px; margin: 0 auto; padding: 1.5rem 1.1rem 4rem; }
+.card {
+  background: var(--surface); border-radius: 20px; border: 0.5px solid var(--hairline);
+  box-shadow: var(--shadow-card); padding: 1.35rem; margin-bottom: 1rem;
+  animation: fadeSlide 240ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+@keyframes fadeSlide { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+.t-display { font-size: clamp(1.5rem, 4vw, 1.9rem); font-weight: 700; letter-spacing: -0.028em; line-height: 1.12; margin: 0; }
+.t-heading { font-size: 1.05rem; font-weight: 600; letter-spacing: -0.015em; margin: 0 0 0.9rem; }
+.t-caption { font-size: 0.8rem; color: var(--label-secondary); letter-spacing: 0.005em; }
+.t-num { font-variant-numeric: tabular-nums; }
+
+.badge {
+  display: inline-flex; align-items: center; gap: 0.35rem;
+  font-size: 0.72rem; font-weight: 600; letter-spacing: 0.02em; text-transform: uppercase;
+  padding: 0.25rem 0.65rem; border-radius: 999px; background: var(--blue-soft); color: var(--blue);
+}
+
+.svc-btn {
+  width: 100%; text-align: left; font-family: inherit; color: var(--label);
+  background: var(--surface-secondary); border: 1.5px solid transparent;
+  border-radius: 14px; padding: 0.95rem 1.05rem; cursor: pointer;
+  display: flex; align-items: center; justify-content: space-between; gap: 0.85rem;
+  touch-action: manipulation;
+  transition: transform 90ms ease-out, border-color 150ms ease, background-color 150ms ease;
+}
+.svc-btn:active { transform: scale(0.985); }
+.svc-btn.selected { border-color: var(--blue); background: var(--blue-soft); }
+
+.slot-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.5rem; }
+@media (max-width: 480px) { .slot-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.slot-btn {
+  font-family: inherit; color: var(--label); background: var(--surface-secondary);
+  border: 1.5px solid transparent; border-radius: 12px; padding: 0.7rem 0.5rem;
+  cursor: pointer; text-align: center; touch-action: manipulation;
+  transition: transform 90ms ease-out, border-color 140ms ease, background-color 140ms ease;
+}
+.slot-btn:active { transform: scale(0.96); }
+.slot-btn.selected { border-color: var(--blue); background: var(--blue); color: #fff; }
+.slot-btn.selected .slot-staff { color: rgba(255,255,255,0.85); }
+
+.field-label { display: block; font-size: 0.78rem; font-weight: 600; color: var(--label-secondary); margin-bottom: 0.35rem; }
+.input, .select, .textarea {
+  width: 100%; font-family: inherit; font-size: 0.9rem; color: var(--label);
+  background: var(--surface-secondary); border: 1px solid transparent;
+  border-radius: 12px; padding: 0.65rem 0.85rem; outline: none;
+  transition: border-color 140ms ease, box-shadow 140ms ease, background-color 140ms ease;
+}
+.input:focus, .select:focus, .textarea:focus { background: var(--surface); border-color: var(--blue); box-shadow: 0 0 0 3.5px var(--blue-soft); }
+
+.btn-primary {
+  width: 100%; font-family: inherit; font-size: 0.9375rem; font-weight: 600;
+  background: var(--blue); color: #fff; border: none; border-radius: 14px;
+  padding: 0.82rem 1.2rem; cursor: pointer; touch-action: manipulation;
+  transition: transform 90ms ease-out, background-color 140ms ease;
+}
+.btn-primary:hover { background: var(--blue-hover); }
+.btn-primary:active { transform: scale(0.975); }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+.btn-secondary {
+  font-family: inherit; font-size: 0.875rem; font-weight: 600;
+  background: var(--surface-secondary); color: var(--label); border: none;
+  border-radius: 12px; padding: 0.68rem 1.2rem; cursor: pointer;
+}
+.btn-secondary:active { transform: scale(0.97); }
+
+@media (prefers-reduced-motion: reduce) {
+  .card { animation: none !important; }
+  .svc-btn:active, .slot-btn:active, .btn-primary:active { transform: none !important; }
+}
+@media (prefers-reduced-transparency: reduce) {
+  .top-bar { backdrop-filter: none !important; -webkit-backdrop-filter: none !important; background: var(--surface) !important; }
+}
+</style>
+</head>
+<body>
+<header class="top-bar">
+  <div class="top-bar-inner">
+    <span id="nav-biz-name" style="font-weight:700;font-size:0.95rem;letter-spacing:-0.015em">BookBot</span>
+    <span class="t-caption">Instant Booking</span>
+  </div>
+</header>
+
+<div class="container">
+  <div id="loading" style="text-align:center;padding:5rem 1rem" class="t-caption">Loading booking page…</div>
+
+  <div id="not-found" class="hidden card" style="text-align:center;padding:3.5rem 1.5rem">
+    <div style="font-size:2.2rem;margin-bottom:0.5rem">🔍</div>
+    <h1 class="t-display" style="font-size:1.35rem">Business not found</h1>
+    <p class="t-caption" style="margin:0.5rem 0 1.5rem">Check the URL or ask the business owner for their BookBot link.</p>
+    <a href="/" class="btn-secondary" style="text-decoration:none;display:inline-block">Explore BookBot</a>
+  </div>
+
+  <div id="booking-app" class="hidden">
+    <!-- Hero Card -->
+    <div class="card">
+      <div class="badge"><span id="biz-emoji">📅</span><span id="biz-vertical">Service</span></div>
+      <h1 id="biz-name" class="t-display" style="margin-top:0.65rem">Business Name</h1>
+      <p id="biz-welcome" class="t-caption" style="margin:0.4rem 0 0;font-size:0.88rem"></p>
+      <p id="biz-address" class="t-caption" style="margin:0.45rem 0 0"></p>
+      <div id="branch-wrap" class="hidden" style="margin-top:1rem;padding-top:0.9rem;border-top:0.5px solid var(--hairline)">
+        <label id="lbl-branch" class="field-label">Location</label>
+        <select id="branch-select" class="select" onchange="onBranchChange()"></select>
+      </div>
+    </div>
+
+    <!-- Step 1: Service -->
+    <div id="step-service" class="card">
+      <h2 id="heading-service" class="t-heading">1. Choose a Service</h2>
+      <div id="services-list" style="display:flex;flex-direction:column;gap:0.55rem"></div>
+    </div>
+
+    <!-- Step 2: Date & Time -->
+    <div id="step-datetime" class="hidden card">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:0.5rem;margin-bottom:0.9rem">
+        <h2 class="t-heading" style="margin:0">2. Pick Date &amp; Time</h2>
+        <span id="selected-svc-pill" class="badge"></span>
+      </div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.7rem;margin-bottom:1rem">
+        <div>
+          <label class="field-label">Date</label>
+          <input id="date-picker" type="date" class="input" onchange="loadSlots()">
+        </div>
+        <div id="staff-filter-wrap">
+          <label id="lbl-staff-pref" class="field-label">Preferred Staff</label>
+          <select id="staff-select" class="select" onchange="loadSlots()"><option value="">Any available</option></select>
+        </div>
+      </div>
+      <div id="slots-container"></div>
+    </div>
+
+    <!-- Step 3: Details -->
+    <div id="step-details" class="hidden card">
+      <h2 class="t-heading">3. Your Details</h2>
+      <div id="slot-summary" style="background:var(--blue-soft);color:var(--blue);border-radius:12px;padding:0.75rem 0.9rem;font-size:0.85rem;margin-bottom:1rem"></div>
+      <form id="booking-form" onsubmit="submitBooking(event)" style="display:flex;flex-direction:column;gap:0.9rem">
+        <div>
+          <label id="lbl-cust-name" class="field-label">Full Name *</label>
+          <input name="customer_name" class="input" required minlength="2" placeholder="Your name">
+        </div>
+        <div>
+          <label class="field-label">WhatsApp / Mobile Number *</label>
+          <div style="display:flex;gap:0.45rem">
+            <span style="display:inline-flex;align-items:center;padding:0 0.85rem;background:var(--surface-secondary);border-radius:12px;font-weight:600;font-size:0.88rem;color:var(--label-secondary)">+91</span>
+            <input name="customer_phone" type="tel" class="input" required pattern="[0-9]{10}" maxlength="10" placeholder="9876543210">
+          </div>
+        </div>
+        <div>
+          <label class="field-label">Notes / Reason for Visit</label>
+          <textarea id="reason-input" name="reason" rows="2" class="textarea" placeholder="Optional notes"></textarea>
+        </div>
+        <div id="form-error" class="hidden" style="background:var(--red-soft);color:var(--red-text);padding:0.65rem 0.85rem;border-radius:10px;font-size:0.82rem"></div>
+        <button id="btn-submit" type="submit" class="btn-primary">Confirm Booking</button>
+      </form>
+    </div>
+
+    <!-- Confirmed -->
+    <div id="step-confirmed" class="hidden card" style="text-align:center;padding:2.25rem 1.5rem">
+      <div id="confirm-icon" style="width:60px;height:60px;border-radius:50%;background:var(--green-soft);color:var(--green-text);display:grid;place-items:center;font-size:1.75rem;margin:0 auto 1rem">✓</div>
+      <h2 id="confirm-title" class="t-display" style="font-size:1.5rem">Confirmed!</h2>
+      <p id="confirm-subtitle" class="t-caption" style="margin:0.35rem 0 1.4rem"></p>
+      <div id="confirm-card" style="background:var(--surface-secondary);border-radius:14px;padding:1rem;text-align:left;font-size:0.86rem;display:flex;flex-direction:column;gap:0.55rem;margin-bottom:1.25rem"></div>
+      <div id="payment-cta" class="hidden" style="margin-bottom:1rem"></div>
+      <button class="btn-secondary" onclick="resetFlow()">Book Another</button>
+    </div>
+
+    <p class="t-caption" style="text-align:center;margin-top:1.5rem">Powered by <a href="/" style="color:var(--blue);text-decoration:none;font-weight:600">BookBot</a></p>
+  </div>
+</div>
+
+<script>
+let biz = null, selectedService = null, selectedSlot = null, selectedBranchId = null;
+
+function esc(s) { const d = document.createElement('div'); d.textContent = s == null ? '' : String(s); return d.innerHTML; }
+function inr(p) { return !p ? 'Free' : '₹' + Math.round(p / 100).toLocaleString('en-IN'); }
+function getSlug() {
+  const m = window.location.pathname.match(/^\/book\/([^\/]+)/);
+  if (m) return decodeURIComponent(m[1]);
+  return new URLSearchParams(window.location.search).get('slug') || '';
+}
+
+async function init() {
+  const slug = getSlug();
+  const url = slug ? `/api/public/business/${encodeURIComponent(slug)}` : '/api/public/business';
+  try {
+    const resp = await fetch(url);
+    if (!resp.ok) throw new Error('not found');
+    biz = await resp.json();
+    renderBusiness();
+  } catch (e) {
+    document.getElementById('loading').classList.add('hidden');
+    document.getElementById('not-found').classList.remove('hidden');
+  }
+}
+
+function renderBusiness() {
+  const L = biz.labels || {};
+  document.title = `Book ${L.booking || 'Appointment'} — ${biz.business_name}`;
+  document.getElementById('nav-biz-name').textContent = biz.business_name;
+  document.getElementById('biz-emoji').textContent = L.welcome_emoji || '📅';
+  document.getElementById('biz-vertical').textContent = biz.vertical?.display_name || biz.business_type;
+  document.getElementById('biz-name').textContent = biz.business_name;
+  document.getElementById('biz-welcome').textContent = biz.settings?.welcome_message || `Book your ${(L.booking || 'appointment').toLowerCase()} in seconds.`;
+
+  const branches = biz.branches || [];
+  if (branches.length) {
+    selectedBranchId = branches[0].id;
+    if (branches[0].address) document.getElementById('biz-address').textContent = '📍 ' + branches[0].address;
+  }
+  if (branches.length > 1) {
+    document.getElementById('branch-wrap').classList.remove('hidden');
+    document.getElementById('lbl-branch').textContent = L.branch || 'Location';
+    document.getElementById('branch-select').innerHTML = branches.map(b => `<option value="${b.id}">${esc(b.name)}${b.address ? ' — ' + esc(b.address) : ''}</option>`).join('');
+  }
+
+  document.getElementById('heading-service').textContent = `1. Choose a ${L.service || 'Service'}`;
+  document.getElementById('lbl-staff-pref').textContent = `Preferred ${L.staff || 'Staff'}`;
+  document.getElementById('lbl-cust-name').textContent = `${L.customer || 'Your'} Name *`;
+  document.getElementById('btn-submit').textContent = `Confirm ${L.booking || 'Booking'}`;
+  if (biz.vertical?.reason_placeholder) document.getElementById('reason-input').placeholder = biz.vertical.reason_placeholder;
+
+  const today = new Date();
+  const maxD = new Date(); maxD.setDate(today.getDate() + (biz.settings?.advance_booking_days || 14));
+  const dp = document.getElementById('date-picker');
+  dp.min = today.toISOString().slice(0, 10);
+  dp.max = maxD.toISOString().slice(0, 10);
+  dp.value = today.toISOString().slice(0, 10);
+
+  const staff = biz.staff || [];
+  if (staff.length <= 1) document.getElementById('staff-filter-wrap').classList.add('hidden');
+  else document.getElementById('staff-select').innerHTML = `<option value="">Any available</option>` + staff.map(s => `<option value="${s.id}">${esc(s.name)}${s.specialty ? ' · ' + esc(s.specialty) : ''}</option>`).join('');
+
+  renderServices();
+  document.getElementById('loading').classList.add('hidden');
+  document.getElementById('booking-app').classList.remove('hidden');
+}
+
+function onBranchChange() {
+  selectedBranchId = document.getElementById('branch-select').value;
+  const br = (biz.branches || []).find(b => b.id === selectedBranchId);
+  document.getElementById('biz-address').textContent = br?.address ? '📍 ' + br.address : '';
+  if (selectedService) loadSlots();
+}
+
+function renderServices() {
+  const el = document.getElementById('services-list');
+  const tree = biz.services || [];
+  if (!tree.length) { el.innerHTML = '<div class="t-caption" style="text-align:center;padding:1.5rem">No services published yet.</div>'; return; }
+
+  const card = (s) => `
+    <button type="button" class="svc-btn ${selectedService?.id === s.id ? 'selected' : ''}" onclick='selectService(${JSON.stringify(s).replace(/'/g, "&#39;")})'>
+      <div style="min-width:0">
+        <div style="font-weight:600;font-size:0.92rem">${esc(s.name)} ${s.requires_deposit ? '<span style="font-size:0.7rem;padding:2px 7px;border-radius:99px;background:var(--orange-soft);color:var(--orange-text);margin-left:4px">Deposit</span>' : ''}</div>
+        ${s.description ? `<div class="t-caption" style="margin-top:2px">${esc(s.description)}</div>` : ''}
+        <div class="t-caption t-num" style="margin-top:3px">${s.duration_minutes} min</div>
+      </div>
+      <div class="t-num" style="font-weight:700;font-size:0.95rem;flex-shrink:0">${inr(s.price_paise)}</div>
+    </button>`;
+
+  el.innerHTML = tree.map(item => {
+    if (item.children?.length) {
+      return `<div style="display:flex;flex-direction:column;gap:0.5rem"><div class="t-caption" style="font-weight:700;text-transform:uppercase;letter-spacing:0.05em;margin-top:0.5rem">${esc(item.name)}</div>${item.children.map(card).join('')}</div>`;
+    }
+    return item.duration_minutes > 0 ? card(item) : '';
+  }).join('');
+}
+
+function selectService(svc) {
+  selectedService = svc; selectedSlot = null;
+  renderServices();
+  document.getElementById('selected-svc-pill').textContent = `${svc.name} · ${inr(svc.price_paise)}`;
+  document.getElementById('step-datetime').classList.remove('hidden');
+  document.getElementById('step-details').classList.add('hidden');
+  loadSlots();
+  document.getElementById('step-datetime').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+async function loadSlots() {
+  if (!selectedService) return;
+  const dateVal = document.getElementById('date-picker').value;
+  if (!dateVal) return;
+  const staffId = document.getElementById('staff-select')?.value || '';
+  const el = document.getElementById('slots-container');
+  el.innerHTML = '<div class="t-caption" style="text-align:center;padding:1.5rem">Checking availability…</div>';
+
+  const params = new URLSearchParams({ service_id: selectedService.id, date: dateVal });
+  if (staffId) params.set('staff_id', staffId);
+  if (selectedBranchId) params.set('branch_id', selectedBranchId);
+
+  try {
+    const resp = await fetch(`/api/public/business/${encodeURIComponent(biz.slug)}/slots?${params}`);
+    const data = await resp.json();
+    const slots = data.slots || [];
+    window._slots = slots;
+    if (!slots.length) {
+      el.innerHTML = '<div class="t-caption" style="text-align:center;padding:1.5rem;background:var(--surface-secondary);border-radius:12px">No openings on this date. Try another day.</div>';
+      return;
+    }
+    const showStaff = new Set(slots.map(s => s.staff_id)).size > 1;
+    el.innerHTML = `<div class="slot-grid">${slots.map((s, i) => `
+      <button type="button" class="slot-btn" data-idx="${i}" onclick="selectSlot(${i})">
+        <div class="t-num" style="font-weight:600;font-size:0.88rem">${esc(s.display)}</div>
+        ${showStaff ? `<div class="slot-staff t-caption" style="font-size:0.7rem;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(s.staff_name)}</div>` : ''}
+      </button>`).join('')}</div>`;
+  } catch (e) {
+    el.innerHTML = '<div class="t-caption" style="color:var(--red-text);text-align:center;padding:1rem">Unable to load slots.</div>';
+  }
+}
+
+function selectSlot(i) {
+  selectedSlot = window._slots[i];
+  document.querySelectorAll('.slot-btn').forEach((b, idx) => b.classList.toggle('selected', idx === i));
+  const L = biz.labels || {};
+  const dt = new Date(selectedSlot.start);
+  document.getElementById('slot-summary').innerHTML = `<strong>${esc(selectedService.name)}</strong> (${inr(selectedService.price_paise)})<br>${dt.toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short'})} at ${esc(selectedSlot.display)} · ${esc(L.staff || 'Staff')}: ${esc(selectedSlot.staff_name)}`;
+  document.getElementById('step-details').classList.remove('hidden');
+  document.getElementById('step-details').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+async function submitBooking(e) {
+  e.preventDefault();
+  if (!selectedService || !selectedSlot) return;
+  const fd = new FormData(e.target);
+  const err = document.getElementById('form-error');
+  const btn = document.getElementById('btn-submit');
+  err.classList.add('hidden'); btn.disabled = true; btn.textContent = 'Booking…';
+
+  try {
+    const resp = await fetch(`/api/public/business/${encodeURIComponent(biz.slug)}/book`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        service_id: selectedService.id,
+        staff_id: selectedSlot.staff_id,
+        branch_id: selectedBranchId,
+        starts_at: selectedSlot.start,
+        customer_name: fd.get('customer_name'),
+        customer_phone: '+91' + fd.get('customer_phone'),
+        reason: fd.get('reason') || null
+      })
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.detail || 'Could not complete booking');
+
+    document.getElementById('step-service').classList.add('hidden');
+    document.getElementById('step-datetime').classList.add('hidden');
+    document.getElementById('step-details').classList.add('hidden');
+    document.getElementById('step-confirmed').classList.remove('hidden');
+
+    const L = biz.labels || {};
+    const dt = new Date(data.starts_at);
+    if (data.requires_deposit) {
+      document.getElementById('confirm-icon').textContent = '⏳';
+      document.getElementById('confirm-icon').style.background = 'var(--orange-soft)';
+      document.getElementById('confirm-icon').style.color = 'var(--orange-text)';
+      document.getElementById('confirm-title').textContent = 'Slot Reserved — Deposit Pending';
+      document.getElementById('confirm-subtitle').textContent = `Pay ${inr(data.deposit_amount_paise)} deposit to finalize your slot.`;
+    } else {
+      document.getElementById('confirm-title').textContent = `${L.booking || 'Booking'} Confirmed`;
+      document.getElementById('confirm-subtitle').textContent = biz.settings?.booking_confirmed_message || 'We look forward to seeing you.';
+    }
+    document.getElementById('confirm-card').innerHTML = `
+      <div style="display:flex;justify-content:space-between"><span class="t-caption">Reference</span><strong style="font-family:ui-monospace,monospace">#${esc(data.reference)}</strong></div>
+      <div style="display:flex;justify-content:space-between"><span class="t-caption">${esc(L.service || 'Service')}</span><strong>${esc(data.service_name)}</strong></div>
+      <div style="display:flex;justify-content:space-between"><span class="t-caption">Date &amp; Time</span><strong class="t-num">${dt.toLocaleDateString('en-IN',{weekday:'short',day:'numeric',month:'short'})}, ${esc(selectedSlot.display)}</strong></div>
+      <div style="display:flex;justify-content:space-between"><span class="t-caption">${esc(L.staff || 'Staff')}</span><strong>${esc(selectedSlot.staff_name)}</strong></div>`;
+
+    if (data.payment_url) {
+      const cta = document.getElementById('payment-cta');
+      cta.classList.remove('hidden');
+      cta.innerHTML = `<a href="${esc(data.payment_url)}" target="_blank" class="btn-primary" style="display:block;text-decoration:none;background:var(--orange)">Pay Deposit (${inr(data.deposit_amount_paise)})</a>`;
+    }
+  } catch (ex) {
+    err.textContent = ex.message;
+    err.classList.remove('hidden');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = `Confirm ${(biz.labels?.booking) || 'Booking'}`;
+  }
+}
+
+function resetFlow() {
+  selectedService = null; selectedSlot = null;
+  document.getElementById('booking-form').reset();
+  document.getElementById('step-confirmed').classList.add('hidden');
+  document.getElementById('step-service').classList.remove('hidden');
+  renderServices();
+}
+
+init();
+</script>
+</body>
+</html>

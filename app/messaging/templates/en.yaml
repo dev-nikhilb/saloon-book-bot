@@ -1,0 +1,49 @@
+welcome_new: "Welcome to {business_name}!"
+welcome_back: "Welcome back to {business_name}!"
+
+service_menu_header: "What would you like to book?"
+service_menu_item: "  {number}. {name} ({duration} min — ₹{price})"
+service_menu_footer: "Reply with a number (or 0 to cancel)."
+
+date_picker_header: "📅 {service_name} — pick a date:"
+date_picker_footer: "Reply with a number (or 0 to cancel)."
+
+slot_picker_header: "⏰ {service_name} on {date}:"
+slot_picker_item: "  {number}. {time} with {staff}"
+slot_picker_footer: "Reply with a number (or 0 to cancel)."
+
+confirm_header: "✅ Please confirm:"
+confirm_service: "  Service: {service_name}"
+confirm_date: "  Date: {date}"
+confirm_time: "  Time: {time}"
+confirm_staff: "  Staff: {staff}"
+confirm_footer: "Reply *YES* to confirm or *0* to cancel."
+
+booking_confirmed: |
+  🎉 Booking confirmed!
+
+    Service: {service_name}
+    Date: {date}
+    Time: {time}
+    Staff: {staff}
+    Booking ID: {booking_id}
+
+  To cancel, type *cancel {booking_id}*
+  See you then! 🙏
+
+booking_cancelled: "Cancelled. Send any message to start over."
+slot_taken: "Sorry, that slot was just taken. Please try again."
+invalid_choice: "Please reply with a number between 1 and {max} (or 0 to cancel)."
+
+reminder: |
+  ⏰ Reminder: You have an appointment at *{business_name}*
+
+    📅 {date} at {time}
+    💇 {service_name}
+    👤 {staff}
+
+  To cancel, reply *cancel*.
+
+human_handoff: "🙋 I've notified the business owner. They'll get back to you shortly."
+business_paused: "{business_name} is currently not accepting new bookings. Please try again later."
+no_services: "No services available right now. Please try again later."

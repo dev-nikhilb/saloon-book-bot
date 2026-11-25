@@ -1,0 +1,49 @@
+welcome_new: "{business_name} में आपका स्वागत है!"
+welcome_back: "फिर से स्वागत है!"
+
+service_menu_header: "आप क्या बुक करना चाहेंगे?"
+service_menu_item: "  {number}. {name} ({duration} मिनट — ₹{price})"
+service_menu_footer: "नंबर भेजें (रद्द करने के लिए 0)।"
+
+date_picker_header: "📅 {service_name} — तारीख चुनें:"
+date_picker_footer: "नंबर भेजें (रद्द करने के लिए 0)।"
+
+slot_picker_header: "⏰ {service_name} — {date}:"
+slot_picker_item: "  {number}. {time} — {staff}"
+slot_picker_footer: "नंबर भेजें (रद्द करने के लिए 0)।"
+
+confirm_header: "✅ कृपया पुष्टि करें:"
+confirm_service: "  सेवा: {service_name}"
+confirm_date: "  तारीख: {date}"
+confirm_time: "  समय: {time}"
+confirm_staff: "  स्टाफ: {staff}"
+confirm_footer: "पुष्टि करने के लिए *YES* भेजें, रद्द करने के लिए *0*।"
+
+booking_confirmed: |
+  🎉 बुकिंग पक्की हो गई!
+
+    सेवा: {service_name}
+    तारीख: {date}
+    समय: {time}
+    स्टाफ: {staff}
+    बुकिंग ID: {booking_id}
+
+  रद्द करने के लिए *cancel {booking_id}* टाइप करें
+  मिलते हैं! 🙏
+
+booking_cancelled: "रद्द हो गया। फिर से शुरू करने के लिए कुछ भी भेजें।"
+slot_taken: "माफ़ करें, वो समय अभी किसी ने ले लिया। दोबारा कोशिश करें।"
+invalid_choice: "कृपया 1 से {max} के बीच नंबर भेजें (रद्द करने के लिए 0)।"
+
+reminder: |
+  ⏰ रिमाइंडर: *{business_name}* में आपकी अपॉइंटमेंट
+
+    📅 {date} — {time}
+    💇 {service_name}
+    👤 {staff}
+
+  रद्द करने के लिए *cancel* भेजें।
+
+human_handoff: "🙋 मालिक को सूचित कर दिया गया है। जल्दी संपर्क करेंगे।"
+business_paused: "{business_name} अभी नई बुकिंग नहीं ले रहा। बाद में कोशिश करें।"
+no_services: "अभी कोई सेवा उपलब्ध नहीं है। बाद में कोशिश करें।"

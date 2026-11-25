@@ -1,0 +1,1698 @@
+"""Dashboard API — all endpoints for the salon owner web dashboard.
+
+Mounts under ``/api`` via ``APIRouter(prefix="/api")``.
+"""
+
+from __future__ import annotations
+
+import uuid
+from datetime import date, datetime, timezone
+from typing import Any
+
+import structlog
+from fastapi import APIRouter, Depends, HTTPException, Query
+from pydantic import BaseModel, Field
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.dashboard.auth import create_access_token, get_current_tenant
+from app.database import get_db
+
+log = structlog.get_logger()
+
+router = APIRouter(prefix="/api", tags=["dashboard"])
+
+
+# ---------------------------------------------------------------------------
+# Pydantic schemas
+# ---------------------------------------------------------------------------
+
+# -- Auth ------------------------------------------------------------------
+
+class LoginRequest(BaseModel):
+    phone: str = Field(..., description="Owner phone number (E.164)")
+    otp: str = Field(..., min_length=6, max_length=6, description="6-digit OTP code")
+
+
+class LoginResponse(BaseModel):
+    access_token: str
+    token_type: str = "bearer"
+    tenant_id: str
+    business_name: str
+
+
+# -- Generic ---------------------------------------------------------------
+
+class PaginatedResponse(BaseModel):
+    items: list[dict[str, Any]]
+    total: int
+    page: int
+    per_page: int
+
+
+class MessageResponse(BaseModel):
+    message: str
+
+
+# -- Tenant ----------------------------------------------------------------
+
+class TenantProfile(BaseModel):
+    id: str
+    business_name: str
+    business_type: str
+    owner_phone: str
+    owner_name: str | None = None
+    slug: str | None = None
+    primary_language: str
+    timezone: str
+    waba_phone_number_id: str | None = None
+    plan_tier: str
+    is_active: bool
+    onboarded_at: str | None = None
+    created_at: str
+    updated_at: str
+
+
+class TenantUpdate(BaseModel):
+    business_name: str | None = None
+    business_type: str | None = None
+    owner_name: str | None = None
+    primary_language: str | None = None
+    timezone: str | None = None
+    onboarded_at: str | None = None
+
+
+class TenantSettingsUpdate(BaseModel):
+    """All configurable tenant settings. All fields optional — only provided
+    fields are persisted."""
+    advance_booking_days: int | None = None
+    min_cancel_hours: int | None = None
+    slot_increment_minutes: int | None = None
+    max_bookings_per_customer: int | None = None
+    send_reminders: bool | None = None
+    reminder_hours_before: int | None = None
+    send_feedback_request: bool | None = None
+    feedback_delay_hours: int | None = None
+    welcome_message: str | None = None
+    booking_confirmed_message: str | None = None
+    google_review_url: str | None = None
+    google_calendar_enabled: bool | None = None
+    razorpay_enabled: bool | None = None
+
+
+# -- Service ---------------------------------------------------------------
+
+class ServiceCreate(BaseModel):
+    name: str
+    description: str | None = None
+    image_url: str | None = None
+    duration_minutes: int = Field(0, ge=0)
+    buffer_minutes: int = Field(0, ge=0)
+    price_paise: int | None = None
+    requires_deposit: bool = False
+    deposit_amount_paise: int | None = None
+    parent_service_id: str | None = None
+    sort_order: int = 0
+
+
+class ServiceUpdate(BaseModel):
+    name: str | None = None
+    description: str | None = None
+    image_url: str | None = None
+    duration_minutes: int | None = Field(None, ge=0)
+    buffer_minutes: int | None = Field(None, ge=0)
+    price_paise: int | None = None
+    requires_deposit: bool | None = None
+    deposit_amount_paise: int | None = None
+    is_active: bool | None = None
+    sort_order: int | None = None
+
+
+class ServiceReorderItem(BaseModel):
+    id: str
+    sort_order: int
+
+
+class ServiceReorderRequest(BaseModel):
+    items: list[ServiceReorderItem]
+
+
+# -- Staff -----------------------------------------------------------------
+
+class StaffCreate(BaseModel):
+    name: str
+    branch_id: str | None = None
+    role: str | None = None
+    bio: str | None = None
+    specialty: str | None = None
+    skills: list | dict | None = None
+    working_hours: dict | None = None
+
+
+class StaffUpdate(BaseModel):
+    name: str | None = None
+    branch_id: str | None = None
+    role: str | None = None
+    bio: str | None = None
+    specialty: str | None = None
+    skills: list | dict | None = None
+    working_hours: dict | None = None
+    is_active: bool | None = None
+
+
+# -- Booking ---------------------------------------------------------------
+
+class BookingCreate(BaseModel):
+    service_id: str
+    staff_id: str | None = None
+    branch_id: str | None = None
+    starts_at: str = Field(..., description="ISO-8601 datetime with timezone")
+    customer_name: str = Field(..., min_length=1, max_length=100)
+    customer_phone: str = Field(..., min_length=8, max_length=20)
+    reason: str | None = None
+    notes: str | None = None
+    requires_deposit: bool = False
+
+
+class BookingNotesUpdate(BaseModel):
+    reason: str | None = None
+    notes: str | None = None
+
+
+class BookingStatusUpdate(BaseModel):
+    status: str = Field(..., description="New status: cancelled, completed, no_show")
+    cancellation_reason: str | None = None
+
+
+# -- Branch ----------------------------------------------------------------
+
+class BranchCreate(BaseModel):
+    name: str = Field(..., min_length=2, max_length=100)
+    address: str | None = None
+    operating_hours: dict | None = None
+
+
+class BranchUpdate(BaseModel):
+    name: str | None = None
+    address: str | None = None
+    operating_hours: dict | None = None
+
+
+class OtpRequest(BaseModel):
+    phone: str = Field(..., description="Owner phone number (E.164)")
+
+
+class PlanUpdateRequest(BaseModel):
+    plan_tier: str = Field(..., description="solo, growth, or pro")
+    billing_cycle: str = Field("monthly", description="monthly or annual")
+
+
+class ApplyTemplateRequest(BaseModel):
+    business_type: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+
+def _row_to_dict(row) -> dict[str, Any]:
+    """Convert a SQLAlchemy Row/RowMapping to a JSON-safe dict."""
+    d = dict(row._mapping) if hasattr(row, "_mapping") else dict(row)
+    for k, v in d.items():
+        if isinstance(v, (uuid.UUID,)):
+            d[k] = str(v)
+        elif isinstance(v, datetime):
+            d[k] = v.isoformat()
+        elif isinstance(v, date):
+            d[k] = v.isoformat()
+        elif isinstance(v, bytes):
+            d[k] = None  # never expose encrypted blobs
+    return d
+
+
+def _parse_uuid(value: str, label: str = "id") -> uuid.UUID:
+    try:
+        return uuid.UUID(value)
+    except ValueError:
+        raise HTTPException(status_code=400, detail=f"Invalid {label}: {value}")
+
+
+def _json_or_none(val) -> str | None:
+    """Serialize a dict/list to a JSON string for JSONB casts, or return None."""
+    if val is None:
+        return None
+    import json
+    return json.dumps(val)
+
+
+# ---------------------------------------------------------------------------
+# AUTH
+# ---------------------------------------------------------------------------
+
+# -- Signup schemas --------------------------------------------------------
+
+class SignupRequest(BaseModel):
+    business_name: str = Field(..., min_length=2, max_length=100)
+    owner_name: str = Field(..., min_length=2, max_length=100)
+    owner_phone: str = Field(..., description="Phone in E.164 format")
+    business_type: str = Field("salon")
+    slug: str = Field(..., min_length=2, max_length=30, pattern="^[a-z0-9][a-z0-9-]*[a-z0-9]$")
+
+
+class SignupResponse(BaseModel):
+    access_token: str
+    tenant_id: str
+    slug: str
+    dashboard_url: str
+    message: str
+
+
+@router.post("/auth/signup", response_model=SignupResponse, status_code=201)
+async def signup(body: SignupRequest, db: AsyncSession = Depends(get_db)):
+    """Self-service tenant registration. Creates tenant + branch + settings + owner staff."""
+    # Check slug uniqueness
+    existing = await db.execute(text("SELECT id FROM tenants WHERE slug = :slug"), {"slug": body.slug})
+    if existing.first():
+        raise HTTPException(409, "This URL is already taken. Try another.")
+
+    # Check phone uniqueness
+    existing_phone = await db.execute(text("SELECT id FROM tenants WHERE owner_phone = :phone"), {"phone": body.owner_phone})
+    if existing_phone.first():
+        raise HTTPException(409, "An account with this phone number already exists.")
+
+    import uuid as uuid_mod
+    tenant_id = uuid_mod.uuid4()
+    branch_id = uuid_mod.uuid4()
+    staff_id = uuid_mod.uuid4()
+    settings_id = uuid_mod.uuid4()
+    now = datetime.now(timezone.utc)
+
+    # Default operating hours
+    import json
+    hours = json.dumps({d: [{"open": "09:00", "close": "20:00"}] for d in ["mon", "tue", "wed", "thu", "fri", "sat"]})
+
+    # Create tenant
+    await db.execute(text("""
+        INSERT INTO tenants (id, business_name, business_type, owner_phone, owner_name, slug,
+            primary_language, timezone, plan_tier, is_active, created_at, updated_at)
+        VALUES (:id, :name, :type, :phone, :owner, :slug, 'en', 'Asia/Kolkata', 'solo', true, :now, :now)
+    """), {"id": tenant_id, "name": body.business_name, "type": body.business_type,
+           "phone": body.owner_phone, "owner": body.owner_name, "slug": body.slug, "now": now})
+
+    # Create branch
+    await db.execute(text("""
+        INSERT INTO branches (id, tenant_id, name, is_primary, operating_hours, created_at)
+        VALUES (:id, :tid, 'Main', true, :hours, :now)
+    """), {"id": branch_id, "tid": tenant_id, "hours": hours, "now": now})
+
+    # Create owner as staff
+    await db.execute(text("""
+        INSERT INTO staff (id, tenant_id, branch_id, name, role, is_active, created_at)
+        VALUES (:id, :tid, :bid, :name, 'owner', true, :now)
+    """), {"id": staff_id, "tid": tenant_id, "bid": branch_id, "name": body.owner_name, "now": now})
+
+    # Create default settings
+    await db.execute(text("""
+        INSERT INTO tenant_settings (id, tenant_id, created_at, updated_at)
+        VALUES (:id, :tid, :now, :now)
+    """), {"id": settings_id, "tid": tenant_id, "now": now})
+
+    # Provision 14-day free trial subscription
+    from app.billing.service import ensure_trial_subscription
+    await ensure_trial_subscription(db, tenant_id, plan_tier="solo")
+
+    await db.commit()
+
+    from app.dashboard.auth import create_access_token
+    token = create_access_token(tenant_id, body.owner_phone)
+
+    from app.config import settings as app_settings
+    dashboard_url = f"https://{body.slug}.{app_settings.base_domain}/dashboard/"
+
+    return SignupResponse(
+        access_token=token,
+        tenant_id=str(tenant_id),
+        slug=body.slug,
+        dashboard_url=dashboard_url,
+        message=f"Welcome! {body.business_name} is ready. Complete setup in your dashboard.",
+    )
+
+
+@router.post("/auth/request-otp")
+async def request_login_otp(body: OtpRequest, db: AsyncSession = Depends(get_db)):
+    """Generate and deliver a 6-digit login OTP for an existing owner account."""
+    from app.auth.otp import request_otp
+
+    result = await request_otp(db, body.phone)
+    if not result["found"]:
+        raise HTTPException(status_code=404, detail="No account found for this phone number")
+    if not result["active"]:
+        raise HTTPException(status_code=403, detail="Account is deactivated")
+
+    resp = {
+        "sent": True,
+        "expires_in": result["expires_in"],
+        "delivered_via": result["delivered_via"],
+    }
+    if "dev_otp" in result:
+        resp["dev_otp"] = result["dev_otp"]
+    return resp
+
+
+@router.post("/auth/login", response_model=LoginResponse)
+async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
+    """Authenticate business owner by phone + 6-digit OTP."""
+    from app.auth.otp import verify_otp
+
+    if not body.otp.isdigit() or len(body.otp) != 6:
+        raise HTTPException(status_code=400, detail="OTP must be exactly 6 digits")
+
+    result = await db.execute(
+        text("SELECT id, business_name, owner_phone, is_active FROM tenants WHERE owner_phone = :phone"),
+        {"phone": body.phone},
+    )
+    tenant = result.first()
+
+    if not tenant:
+        raise HTTPException(status_code=404, detail="No account found for this phone number")
+
+    row = tenant._mapping
+    if not row["is_active"]:
+        raise HTTPException(status_code=403, detail="Account is deactivated")
+
+    ok, err = await verify_otp(body.phone, body.otp)
+    if not ok:
+        raise HTTPException(status_code=401, detail=err)
+
+    token = create_access_token(row["id"], row["owner_phone"])
+    log.info("dashboard.login", tenant_id=str(row["id"]), phone=body.phone)
+
+    return LoginResponse(
+        access_token=token,
+        tenant_id=str(row["id"]),
+        business_name=row["business_name"],
+    )
+
+
+# ---------------------------------------------------------------------------
+# TENANT PROFILE
+# ---------------------------------------------------------------------------
+
+@router.get("/tenant", response_model=TenantProfile)
+async def get_tenant(
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        text("SELECT * FROM tenants WHERE id = :id"), {"id": tenant_id}
+    )
+    row = result.first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+    return _row_to_dict(row)
+
+
+@router.put("/tenant", response_model=TenantProfile)
+async def update_tenant(
+    body: TenantUpdate,
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    updates = body.model_dump(exclude_unset=True)
+    if not updates:
+        raise HTTPException(status_code=400, detail="No fields to update")
+
+    set_clauses = ", ".join(f"{k} = :{k}" for k in updates)
+    updates["id"] = tenant_id
+    updates["now"] = datetime.now(timezone.utc)
+    await db.execute(
+        text(f"UPDATE tenants SET {set_clauses}, updated_at = :now WHERE id = :id"),
+        updates,
+    )
+    await db.commit()
+
+    result = await db.execute(
+        text("SELECT * FROM tenants WHERE id = :id"), {"id": tenant_id}
+    )
+    return _row_to_dict(result.first())
+
+
+class WhatsAppConfig(BaseModel):
+    waba_phone_number_id: str
+    waba_access_token: str | None = None
+
+
+@router.put("/tenant/whatsapp")
+async def update_whatsapp_config(
+    body: WhatsAppConfig,
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update WhatsApp Business API credentials for tenant."""
+    params: dict[str, Any] = {
+        "tid": tenant_id,
+        "pid": body.waba_phone_number_id,
+        "now": datetime.now(timezone.utc),
+    }
+    if body.waba_access_token:
+        from app.crypto import encrypt_secret
+
+        params["token"] = encrypt_secret(body.waba_access_token)
+        await db.execute(
+            text("UPDATE tenants SET waba_phone_number_id = :pid, waba_access_token_encrypted = :token, updated_at = :now WHERE id = :tid"),
+            params,
+        )
+    else:
+        await db.execute(
+            text("UPDATE tenants SET waba_phone_number_id = :pid, updated_at = :now WHERE id = :tid"),
+            params,
+        )
+    await db.commit()
+    return {"status": "ok", "waba_phone_number_id": body.waba_phone_number_id}
+
+
+@router.get("/tenant/settings")
+async def get_tenant_settings(
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        text("SELECT * FROM tenant_settings WHERE tenant_id = :tid"),
+        {"tid": tenant_id},
+    )
+    row = result.first()
+    if not row:
+        return {}
+    return _row_to_dict(row)
+
+
+@router.put("/tenant/settings")
+async def update_tenant_settings(
+    body: TenantSettingsUpdate,
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    updates = body.model_dump(exclude_unset=True)
+    if not updates:
+        raise HTTPException(status_code=400, detail="No fields to update")
+
+    # Check if settings row exists
+    result = await db.execute(
+        text("SELECT id FROM tenant_settings WHERE tenant_id = :tid"),
+        {"tid": tenant_id},
+    )
+    existing = result.first()
+
+    if existing:
+        set_clauses = ", ".join(f"{k} = :{k}" for k in updates)
+        updates["tid"] = tenant_id
+        await db.execute(
+            text(f"UPDATE tenant_settings SET {set_clauses} WHERE tenant_id = :tid"),
+            updates,
+        )
+    else:
+        updates["id"] = uuid.uuid4()
+        updates["tenant_id"] = tenant_id
+        cols = ", ".join(updates.keys())
+        vals = ", ".join(f":{k}" for k in updates.keys())
+        await db.execute(
+            text(f"INSERT INTO tenant_settings ({cols}) VALUES ({vals})"),
+            updates,
+        )
+
+    await db.commit()
+
+    result = await db.execute(
+        text("SELECT * FROM tenant_settings WHERE tenant_id = :tid"),
+        {"tid": tenant_id},
+    )
+    return _row_to_dict(result.first())
+
+
+# ---------------------------------------------------------------------------
+# SERVICES
+# ---------------------------------------------------------------------------
+
+@router.get("/services")
+async def list_services(
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return all active services in a tree structure (parents with nested children)."""
+    result = await db.execute(
+        text(
+            "SELECT * FROM services WHERE tenant_id = :tid AND is_active = true "
+            "ORDER BY sort_order, name"
+        ),
+        {"tid": tenant_id},
+    )
+    rows = [_row_to_dict(r) for r in result.fetchall()]
+
+    # Build tree: top-level parents, then nest children
+    by_id: dict[str, dict] = {}
+    parents: list[dict] = []
+
+    for row in rows:
+        row["children"] = []
+        by_id[row["id"]] = row
+
+    for row in rows:
+        pid = row.get("parent_service_id")
+        if pid and pid in by_id:
+            by_id[pid]["children"].append(row)
+        else:
+            parents.append(row)
+
+    return parents
+
+
+@router.post("/services", status_code=201)
+async def create_service(
+    body: ServiceCreate,
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    service_id = uuid.uuid4()
+    parent_id = _parse_uuid(body.parent_service_id, "parent_service_id") if body.parent_service_id else None
+
+    # If parent specified, verify it belongs to this tenant
+    if parent_id:
+        check = await db.execute(
+            text("SELECT id FROM services WHERE id = :id AND tenant_id = :tid AND is_active = true"),
+            {"id": parent_id, "tid": tenant_id},
+        )
+        if not check.first():
+            raise HTTPException(status_code=404, detail="Parent service not found")
+
+    await db.execute(
+        text(
+            "INSERT INTO services "
+            "(id, tenant_id, parent_service_id, name, description, image_url, "
+            "duration_minutes, buffer_minutes, price_paise, requires_deposit, "
+            "deposit_amount_paise, sort_order) "
+            "VALUES (:id, :tid, :parent_id, :name, :description, :image_url, "
+            ":duration, :buffer, :price, :deposit_req, :deposit_amt, :sort_order)"
+        ),
+        {
+            "id": service_id,
+            "tid": tenant_id,
+            "parent_id": parent_id,
+            "name": body.name,
+            "description": body.description,
+            "image_url": body.image_url,
+            "duration": body.duration_minutes,
+            "buffer": body.buffer_minutes,
+            "price": body.price_paise,
+            "deposit_req": body.requires_deposit,
+            "deposit_amt": body.deposit_amount_paise,
+            "sort_order": body.sort_order,
+        },
+    )
+    await db.commit()
+
+    result = await db.execute(
+        text("SELECT * FROM services WHERE id = :id"), {"id": service_id}
+    )
+    return _row_to_dict(result.first())
+
+
+@router.put("/services/reorder", response_model=MessageResponse)
+async def reorder_services(
+    body: ServiceReorderRequest,
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    for item in body.items:
+        sid = _parse_uuid(item.id, "service id")
+        await db.execute(
+            text(
+                "UPDATE services SET sort_order = :order "
+                "WHERE id = :id AND tenant_id = :tid"
+            ),
+            {"order": item.sort_order, "id": sid, "tid": tenant_id},
+        )
+    await db.commit()
+    return MessageResponse(message="Services reordered")
+
+
+@router.get("/services/{service_id}")
+async def get_service(
+    service_id: str,
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    sid = _parse_uuid(service_id, "service_id")
+    result = await db.execute(
+        text("SELECT * FROM services WHERE id = :id AND tenant_id = :tid"),
+        {"id": sid, "tid": tenant_id},
+    )
+    row = result.first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Service not found")
+    return _row_to_dict(row)
+
+
+@router.put("/services/{service_id}")
+async def update_service(
+    service_id: str,
+    body: ServiceUpdate,
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    sid = _parse_uuid(service_id, "service_id")
+    updates = body.model_dump(exclude_unset=True)
+    if not updates:
+        raise HTTPException(status_code=400, detail="No fields to update")
+
+    set_clauses = ", ".join(f"{k} = :{k}" for k in updates)
+    updates["id"] = sid
+    updates["tid"] = tenant_id
+
+    result = await db.execute(
+        text(f"UPDATE services SET {set_clauses} WHERE id = :id AND tenant_id = :tid RETURNING id"),
+        updates,
+    )
+    if not result.first():
+        raise HTTPException(status_code=404, detail="Service not found")
+    await db.commit()
+
+    result = await db.execute(
+        text("SELECT * FROM services WHERE id = :id"), {"id": sid}
+    )
+    return _row_to_dict(result.first())
+
+
+@router.delete("/services/{service_id}", response_model=MessageResponse)
+async def delete_service(
+    service_id: str,
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    sid = _parse_uuid(service_id, "service_id")
+    result = await db.execute(
+        text(
+            "UPDATE services SET is_active = false "
+            "WHERE id = :id AND tenant_id = :tid RETURNING id"
+        ),
+        {"id": sid, "tid": tenant_id},
+    )
+    if not result.first():
+        raise HTTPException(status_code=404, detail="Service not found")
+
+    # Also soft-delete children
+    await db.execute(
+        text(
+            "UPDATE services SET is_active = false "
+            "WHERE parent_service_id = :pid AND tenant_id = :tid"
+        ),
+        {"pid": sid, "tid": tenant_id},
+    )
+    await db.commit()
+    return MessageResponse(message="Service deleted")
+
+
+# ---------------------------------------------------------------------------
+# STAFF
+# ---------------------------------------------------------------------------
+
+@router.get("/staff")
+async def list_staff(
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        text(
+            "SELECT id, tenant_id, branch_id, name, role, bio, specialty, skills, "
+            "working_hours, is_active, created_at "
+            "FROM staff WHERE tenant_id = :tid AND is_active = true ORDER BY name"
+        ),
+        {"tid": tenant_id},
+    )
+    return [_row_to_dict(r) for r in result.fetchall()]
+
+
+@router.post("/staff", status_code=201)
+async def create_staff(
+    body: StaffCreate,
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.billing.service import enforce_plan_limit
+    from app.exceptions import PlanLimitExceededError
+
+    try:
+        await enforce_plan_limit(db, tenant_id, "staff")
+    except PlanLimitExceededError as exc:
+        raise HTTPException(status_code=402, detail=f"Plan limit reached ({exc}). Upgrade your plan to add more team members.")
+
+    staff_id = uuid.uuid4()
+    branch_id = _parse_uuid(body.branch_id, "branch_id") if body.branch_id else None
+
+    # If no branch specified, use primary branch
+    if not branch_id:
+        br = await db.execute(
+            text("SELECT id FROM branches WHERE tenant_id = :tid AND is_primary = true LIMIT 1"),
+            {"tid": tenant_id},
+        )
+        br_row = br.first()
+        if br_row:
+            branch_id = br_row.id
+
+    # Normalize skills: accept list or dict
+    skills_val = body.skills
+    if isinstance(skills_val, list):
+        skills_val = skills_val  # keep as list for JSON
+    elif isinstance(skills_val, dict):
+        skills_val = skills_val
+    else:
+        skills_val = None
+
+    await db.execute(
+        text(
+            "INSERT INTO staff (id, tenant_id, branch_id, name, role, bio, specialty, skills, working_hours, is_active, created_at) "
+            "VALUES (:id, :tid, :branch_id, :name, :role, :bio, :specialty, CAST(:skills AS jsonb), CAST(:hours AS jsonb), true, now())"
+        ),
+        {
+            "id": staff_id,
+            "tid": tenant_id,
+            "branch_id": branch_id,
+            "name": body.name,
+            "role": body.role,
+            "bio": body.bio,
+            "specialty": body.specialty,
+            "skills": _json_or_none(skills_val),
+            "hours": _json_or_none(body.working_hours),
+        },
+    )
+    await db.commit()
+
+    result = await db.execute(
+        text(
+            "SELECT id, tenant_id, branch_id, name, role, bio, specialty, skills, "
+            "working_hours, is_active, created_at FROM staff WHERE id = :id"
+        ),
+        {"id": staff_id},
+    )
+    return _row_to_dict(result.first())
+
+
+@router.put("/staff/{staff_id}")
+async def update_staff(
+    staff_id: str,
+    body: StaffUpdate,
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    sid = _parse_uuid(staff_id, "staff_id")
+    updates = body.model_dump(exclude_unset=True)
+    if not updates:
+        raise HTTPException(status_code=400, detail="No fields to update")
+
+    # Handle JSONB fields with explicit cast
+    set_parts = []
+    for k in updates:
+        if k in ("skills", "working_hours"):
+            set_parts.append(f"{k} = CAST(:{k} AS jsonb)")
+            updates[k] = _json_or_none(updates[k])
+        elif k == "branch_id":
+            updates[k] = _parse_uuid(updates[k], "branch_id") if updates[k] else None
+            set_parts.append(f"{k} = :{k}")
+        else:
+            set_parts.append(f"{k} = :{k}")
+
+    set_clause = ", ".join(set_parts)
+    updates["id"] = sid
+    updates["tid"] = tenant_id
+
+    result = await db.execute(
+        text(f"UPDATE staff SET {set_clause} WHERE id = :id AND tenant_id = :tid RETURNING id"),
+        updates,
+    )
+    if not result.first():
+        raise HTTPException(status_code=404, detail="Staff member not found")
+    await db.commit()
+
+    result = await db.execute(
+        text(
+            "SELECT id, tenant_id, branch_id, name, role, bio, specialty, skills, "
+            "working_hours, is_active, created_at FROM staff WHERE id = :id"
+        ),
+        {"id": sid},
+    )
+    return _row_to_dict(result.first())
+
+
+@router.delete("/staff/{staff_id}", response_model=MessageResponse)
+async def delete_staff(
+    staff_id: str,
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    sid = _parse_uuid(staff_id, "staff_id")
+    result = await db.execute(
+        text(
+            "UPDATE staff SET is_active = false "
+            "WHERE id = :id AND tenant_id = :tid RETURNING id"
+        ),
+        {"id": sid, "tid": tenant_id},
+    )
+    if not result.first():
+        raise HTTPException(status_code=404, detail="Staff member not found")
+    await db.commit()
+    return MessageResponse(message="Staff member deleted")
+
+
+# ---------------------------------------------------------------------------
+# BOOKINGS
+# ---------------------------------------------------------------------------
+
+@router.get("/bookings")
+async def list_bookings(
+    from_date: date | None = Query(None),
+    to_date: date | None = Query(None),
+    status: str | None = Query(None),
+    staff_id: str | None = Query(None),
+    customer_id: str | None = Query(None),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(20, ge=1, le=100),
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    conditions = ["b.tenant_id = :tid"]
+    params: dict[str, Any] = {"tid": tenant_id}
+
+    if from_date:
+        conditions.append("b.starts_at >= :from_date")
+        params["from_date"] = datetime.combine(from_date, datetime.min.time(), tzinfo=timezone.utc)
+    if to_date:
+        conditions.append("b.starts_at::date <= :to_date")
+        params["to_date"] = to_date
+    if status:
+        statuses = [s.strip() for s in status.split(",") if s.strip()]
+        if len(statuses) == 1:
+            conditions.append("b.status = :status")
+            params["status"] = statuses[0]
+        elif statuses:
+            placeholders = ", ".join(f":st_{i}" for i in range(len(statuses)))
+            conditions.append(f"b.status IN ({placeholders})")
+            for i, s in enumerate(statuses):
+                params[f"st_{i}"] = s
+    if staff_id:
+        conditions.append("b.staff_id = :staff_id")
+        params["staff_id"] = _parse_uuid(staff_id, "staff_id")
+    if customer_id:
+        conditions.append("b.customer_id = :customer_id")
+        params["customer_id"] = _parse_uuid(customer_id, "customer_id")
+
+    where = " AND ".join(conditions)
+
+    # Count
+    count_result = await db.execute(
+        text(f"SELECT count(*) FROM bookings b WHERE {where}"), params
+    )
+    total = count_result.scalar()
+
+    # Paginated results with joined names
+    offset = (page - 1) * per_page
+    params["limit"] = per_page
+    params["offset"] = offset
+
+    result = await db.execute(
+        text(
+            f"SELECT b.*, "
+            f"c.name AS customer_name, c.phone AS customer_phone, "
+            f"s.name AS service_name, st.name AS staff_name "
+            f"FROM bookings b "
+            f"LEFT JOIN customers c ON c.id = b.customer_id "
+            f"LEFT JOIN services s ON s.id = b.service_id "
+            f"LEFT JOIN staff st ON st.id = b.staff_id "
+            f"WHERE {where} "
+            f"ORDER BY b.starts_at DESC "
+            f"LIMIT :limit OFFSET :offset"
+        ),
+        params,
+    )
+    items = [_row_to_dict(r) for r in result.fetchall()]
+
+    return PaginatedResponse(items=items, total=total, page=page, per_page=per_page)
+
+
+@router.get("/bookings/{booking_id}")
+async def get_booking(
+    booking_id: str,
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    bid = _parse_uuid(booking_id, "booking_id")
+    result = await db.execute(
+        text(
+            "SELECT b.*, "
+            "c.name AS customer_name, c.phone AS customer_phone, "
+            "s.name AS service_name, s.duration_minutes, s.price_paise AS service_price_paise, "
+            "st.name AS staff_name "
+            "FROM bookings b "
+            "LEFT JOIN customers c ON c.id = b.customer_id "
+            "LEFT JOIN services s ON s.id = b.service_id "
+            "LEFT JOIN staff st ON st.id = b.staff_id "
+            "WHERE b.id = :id AND b.tenant_id = :tid"
+        ),
+        {"id": bid, "tid": tenant_id},
+    )
+    row = result.first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    return _row_to_dict(row)
+
+
+@router.post("/bookings", status_code=201)
+async def create_manual_booking(
+    body: BookingCreate,
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a walk-in or phone booking from the owner dashboard."""
+    from datetime import timedelta
+
+    from app.billing.service import enforce_plan_limit
+    from app.bookings.repository import create_booking
+    from app.exceptions import PlanLimitExceededError, SlotConflictError
+
+    try:
+        await enforce_plan_limit(db, tenant_id, "bookings")
+    except PlanLimitExceededError as exc:
+        raise HTTPException(status_code=402, detail=f"Monthly booking limit reached ({exc})")
+
+    svc_id = _parse_uuid(body.service_id, "service_id")
+    staff_id = _parse_uuid(body.staff_id, "staff_id") if body.staff_id else None
+    branch_id = _parse_uuid(body.branch_id, "branch_id") if body.branch_id else None
+
+    try:
+        starts_at = datetime.fromisoformat(body.starts_at)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid starts_at ISO datetime")
+
+    svc_res = await db.execute(
+        text("SELECT id, duration_minutes, requires_deposit FROM services WHERE id = :sid AND tenant_id = :tid AND is_active = true"),
+        {"sid": svc_id, "tid": tenant_id},
+    )
+    svc = svc_res.first()
+    if not svc or svc.duration_minutes <= 0:
+        raise HTTPException(status_code=404, detail="Service not found")
+
+    ends_at = starts_at + timedelta(minutes=svc.duration_minutes)
+
+    if not staff_id:
+        st_res = await db.execute(
+            text("SELECT id, branch_id FROM staff WHERE tenant_id = :tid AND is_active = true ORDER BY created_at LIMIT 1"),
+            {"tid": tenant_id},
+        )
+        st = st_res.first()
+        if not st:
+            raise HTTPException(status_code=400, detail="No active staff available")
+        staff_id = st.id
+        if not branch_id:
+            branch_id = st.branch_id
+
+    if not branch_id:
+        br_res = await db.execute(
+            text("SELECT id FROM branches WHERE tenant_id = :tid AND is_primary = true LIMIT 1"),
+            {"tid": tenant_id},
+        )
+        br = br_res.first()
+        if not br:
+            raise HTTPException(status_code=400, detail="No branch configured")
+        branch_id = br.id
+
+    # Normalize & upsert customer
+    phone = body.customer_phone.strip().replace(" ", "").replace("-", "")
+    if not phone.startswith("+"):
+        phone = f"+91{phone}" if len(phone) == 10 and phone.isdigit() else f"+{phone}"
+
+    cust_res = await db.execute(
+        text("SELECT id FROM customers WHERE tenant_id = :tid AND phone = :phone"),
+        {"tid": tenant_id, "phone": phone},
+    )
+    cust = cust_res.first()
+    if not cust:
+        cust_id = uuid.uuid4()
+        await db.execute(
+            text("INSERT INTO customers (id, tenant_id, phone, name, first_seen_at) VALUES (:id, :tid, :phone, :name, :now)"),
+            {"id": cust_id, "tid": tenant_id, "phone": phone, "name": body.customer_name.strip(), "now": datetime.now(timezone.utc)},
+        )
+        await db.commit()
+    else:
+        cust_id = cust.id
+
+    try:
+        created = await create_booking(
+            db=db,
+            tenant_id=tenant_id,
+            branch_id=branch_id,
+            staff_id=staff_id,
+            customer_id=cust_id,
+            service_id=svc_id,
+            starts_at=starts_at,
+            ends_at=ends_at,
+            requires_deposit=body.requires_deposit,
+            reason=body.reason,
+            notes=body.notes,
+        )
+    except SlotConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+
+    return created
+
+
+@router.put("/bookings/{booking_id}")
+async def update_booking_details(
+    booking_id: str,
+    body: BookingNotesUpdate,
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update visit reason and/or post-visit notes (doctor notes, stylist comments)."""
+    bid = _parse_uuid(booking_id, "booking_id")
+    updates = body.model_dump(exclude_unset=True)
+    if not updates:
+        raise HTTPException(status_code=400, detail="No fields to update")
+
+    set_clauses = ", ".join(f"{k} = :{k}" for k in updates)
+    updates["id"] = bid
+    updates["tid"] = tenant_id
+    updates["now"] = datetime.now(timezone.utc)
+
+    res = await db.execute(
+        text(f"UPDATE bookings SET {set_clauses}, updated_at = :now WHERE id = :id AND tenant_id = :tid RETURNING id"),
+        updates,
+    )
+    if not res.first():
+        raise HTTPException(status_code=404, detail="Booking not found")
+    await db.commit()
+
+    row = (await db.execute(text("SELECT * FROM bookings WHERE id = :id"), {"id": bid})).first()
+    return _row_to_dict(row)
+
+
+@router.post("/bookings/{booking_id}/confirm")
+async def confirm_pending_booking(
+    booking_id: str,
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Manually confirm a pending_deposit booking (e.g. cash/UPI deposit received)."""
+    from app.bookings.models import BookingStatus
+    from app.bookings.repository import update_booking_status as repo_update_status
+    from app.exceptions import BookingNotFoundError, InvalidStateTransitionError
+
+    bid = _parse_uuid(booking_id, "booking_id")
+    try:
+        await repo_update_status(db, tenant_id, bid, BookingStatus.CONFIRMED)
+    except BookingNotFoundError:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    except InvalidStateTransitionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+
+    row = (await db.execute(text("SELECT * FROM bookings WHERE id = :id"), {"id": bid})).first()
+    return _row_to_dict(row)
+
+
+@router.put("/bookings/{booking_id}/status")
+async def update_booking_status(
+    booking_id: str,
+    body: BookingStatusUpdate,
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    from app.bookings.repository import update_booking_status as repo_update_status
+    from app.exceptions import BookingNotFoundError, InvalidStateTransitionError
+
+    bid = _parse_uuid(booking_id, "booking_id")
+    allowed = {"cancelled", "completed", "no_show"}
+    if body.status not in allowed:
+        raise HTTPException(
+            status_code=400, detail=f"Status must be one of: {', '.join(sorted(allowed))}"
+        )
+
+    try:
+        await repo_update_status(
+            db, tenant_id, bid, body.status, cancellation_reason=body.cancellation_reason
+        )
+    except BookingNotFoundError:
+        raise HTTPException(status_code=404, detail="Booking not found")
+    except InvalidStateTransitionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+
+    log.info("booking.status_updated", booking_id=str(bid), new_status=body.status)
+
+    result = await db.execute(
+        text("SELECT * FROM bookings WHERE id = :id"), {"id": bid}
+    )
+    return _row_to_dict(result.first())
+
+
+# ---------------------------------------------------------------------------
+# CUSTOMERS
+# ---------------------------------------------------------------------------
+
+@router.get("/customers")
+async def list_customers(
+    search: str | None = Query(None, description="Search by name or phone"),
+    page: int = Query(1, ge=1),
+    per_page: int = Query(20, ge=1, le=100),
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    conditions = ["tenant_id = :tid"]
+    params: dict[str, Any] = {"tid": tenant_id}
+
+    if search:
+        conditions.append("(name ILIKE :search OR phone ILIKE :search)")
+        params["search"] = f"%{search}%"
+
+    where = " AND ".join(conditions)
+
+    count_result = await db.execute(
+        text(f"SELECT count(*) FROM customers WHERE {where}"), params
+    )
+    total = count_result.scalar()
+
+    offset = (page - 1) * per_page
+    params["limit"] = per_page
+    params["offset"] = offset
+
+    result = await db.execute(
+        text(
+            f"SELECT * FROM customers WHERE {where} "
+            f"ORDER BY last_visit_at DESC NULLS LAST, first_seen_at DESC "
+            f"LIMIT :limit OFFSET :offset"
+        ),
+        params,
+    )
+    items = [_row_to_dict(r) for r in result.fetchall()]
+    return PaginatedResponse(items=items, total=total, page=page, per_page=per_page)
+
+
+@router.get("/customers/{customer_id}")
+async def get_customer(
+    customer_id: str,
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    cid = _parse_uuid(customer_id, "customer_id")
+
+    # Customer details
+    result = await db.execute(
+        text("SELECT * FROM customers WHERE id = :id AND tenant_id = :tid"),
+        {"id": cid, "tid": tenant_id},
+    )
+    customer = result.first()
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+
+    # Booking history
+    bookings_result = await db.execute(
+        text(
+            "SELECT b.*, s.name AS service_name, st.name AS staff_name "
+            "FROM bookings b "
+            "LEFT JOIN services s ON s.id = b.service_id "
+            "LEFT JOIN staff st ON st.id = b.staff_id "
+            "WHERE b.customer_id = :cid AND b.tenant_id = :tid "
+            "ORDER BY b.starts_at DESC LIMIT 50"
+        ),
+        {"cid": cid, "tid": tenant_id},
+    )
+
+    # Feedback
+    feedback_result = await db.execute(
+        text(
+            "SELECT f.* FROM feedback f "
+            "JOIN bookings b ON b.id = f.booking_id "
+            "WHERE b.customer_id = :cid AND f.tenant_id = :tid "
+            "ORDER BY f.created_at DESC LIMIT 20"
+        ),
+        {"cid": cid, "tid": tenant_id},
+    )
+
+    return {
+        "customer": _row_to_dict(customer),
+        "bookings": [_row_to_dict(r) for r in bookings_result.fetchall()],
+        "feedback": [_row_to_dict(r) for r in feedback_result.fetchall()],
+    }
+
+
+# ---------------------------------------------------------------------------
+# ANALYTICS
+# ---------------------------------------------------------------------------
+
+@router.get("/analytics/overview")
+async def analytics_overview(
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Summary dashboard: today's bookings, this week's revenue, customer count,
+    popular services, average rating."""
+    params = {"tid": tenant_id}
+
+    # Today's bookings
+    today_result = await db.execute(
+        text(
+            "SELECT count(*) AS count, "
+            "count(*) FILTER (WHERE status = 'confirmed') AS confirmed, "
+            "count(*) FILTER (WHERE status = 'completed') AS completed, "
+            "count(*) FILTER (WHERE status = 'cancelled') AS cancelled "
+            "FROM bookings "
+            "WHERE tenant_id = :tid AND starts_at::date = CURRENT_DATE"
+        ),
+        params,
+    )
+    today = _row_to_dict(today_result.first())
+
+    # This week's revenue (captured payments)
+    revenue_result = await db.execute(
+        text(
+            "SELECT COALESCE(SUM(amount_paise), 0) AS total_paise, count(*) AS payment_count "
+            "FROM payments "
+            "WHERE tenant_id = :tid AND status = 'captured' "
+            "AND created_at >= date_trunc('week', CURRENT_DATE)"
+        ),
+        params,
+    )
+    week_revenue = _row_to_dict(revenue_result.first())
+
+    # Total customers
+    customer_count_result = await db.execute(
+        text("SELECT count(*) AS total FROM customers WHERE tenant_id = :tid"),
+        params,
+    )
+    customer_count = customer_count_result.scalar()
+
+    # Top 5 services (by booking count, last 30 days)
+    popular_result = await db.execute(
+        text(
+            "SELECT s.id, s.name, count(b.id) AS booking_count "
+            "FROM bookings b "
+            "JOIN services s ON s.id = b.service_id "
+            "WHERE b.tenant_id = :tid AND b.starts_at >= CURRENT_DATE - interval '30 days' "
+            "GROUP BY s.id, s.name ORDER BY booking_count DESC LIMIT 5"
+        ),
+        params,
+    )
+    popular_services = [_row_to_dict(r) for r in popular_result.fetchall()]
+
+    # Average rating
+    rating_result = await db.execute(
+        text(
+            "SELECT ROUND(AVG(rating)::numeric, 2) AS avg_rating, count(*) AS review_count "
+            "FROM feedback WHERE tenant_id = :tid AND rating IS NOT NULL"
+        ),
+        params,
+    )
+    ratings = _row_to_dict(rating_result.first())
+
+    return {
+        "today_bookings": today,
+        "week_revenue": week_revenue,
+        "total_customers": customer_count,
+        "popular_services": popular_services,
+        "ratings": ratings,
+    }
+
+
+@router.get("/analytics/bookings")
+async def analytics_bookings(
+    from_date: date = Query(...),
+    to_date: date = Query(...),
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Booking statistics by date range: daily counts and status breakdown."""
+    params: dict[str, Any] = {"tid": tenant_id, "from": from_date, "to": to_date}
+
+    # Daily counts
+    daily_result = await db.execute(
+        text(
+            "SELECT starts_at::date AS day, count(*) AS total, "
+            "count(*) FILTER (WHERE status = 'confirmed') AS confirmed, "
+            "count(*) FILTER (WHERE status = 'completed') AS completed, "
+            "count(*) FILTER (WHERE status = 'cancelled') AS cancelled, "
+            "count(*) FILTER (WHERE status = 'no_show') AS no_show "
+            "FROM bookings "
+            "WHERE tenant_id = :tid AND starts_at::date >= :from AND starts_at::date <= :to "
+            "GROUP BY starts_at::date ORDER BY day"
+        ),
+        params,
+    )
+    daily = [_row_to_dict(r) for r in daily_result.fetchall()]
+
+    # Overall status breakdown
+    status_result = await db.execute(
+        text(
+            "SELECT status, count(*) AS count "
+            "FROM bookings "
+            "WHERE tenant_id = :tid AND starts_at::date >= :from AND starts_at::date <= :to "
+            "GROUP BY status"
+        ),
+        params,
+    )
+    status_breakdown = {r._mapping["status"]: r._mapping["count"] for r in status_result.fetchall()}
+
+    # Total
+    total = sum(status_breakdown.values())
+
+    return {
+        "from_date": from_date.isoformat(),
+        "to_date": to_date.isoformat(),
+        "total": total,
+        "status_breakdown": status_breakdown,
+        "daily": daily,
+    }
+
+
+@router.get("/analytics/revenue")
+async def analytics_revenue(
+    from_date: date = Query(...),
+    to_date: date = Query(...),
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Revenue analytics: daily totals and per-service breakdown."""
+    params: dict[str, Any] = {"tid": tenant_id, "from": from_date, "to": to_date}
+
+    # Daily revenue
+    daily_result = await db.execute(
+        text(
+            "SELECT p.created_at::date AS day, "
+            "SUM(p.amount_paise) AS total_paise, count(*) AS payment_count "
+            "FROM payments p "
+            "WHERE p.tenant_id = :tid AND p.status = 'captured' "
+            "AND p.created_at::date >= :from AND p.created_at::date <= :to "
+            "GROUP BY p.created_at::date ORDER BY day"
+        ),
+        params,
+    )
+    daily = [_row_to_dict(r) for r in daily_result.fetchall()]
+
+    # Revenue by service
+    service_result = await db.execute(
+        text(
+            "SELECT s.id, s.name, SUM(p.amount_paise) AS total_paise, count(p.id) AS payment_count "
+            "FROM payments p "
+            "JOIN bookings b ON b.id = p.booking_id "
+            "JOIN services s ON s.id = b.service_id "
+            "WHERE p.tenant_id = :tid AND p.status = 'captured' "
+            "AND p.created_at::date >= :from AND p.created_at::date <= :to "
+            "GROUP BY s.id, s.name ORDER BY total_paise DESC"
+        ),
+        params,
+    )
+    by_service = [_row_to_dict(r) for r in service_result.fetchall()]
+
+    # Period total
+    total_paise = sum(d.get("total_paise", 0) or 0 for d in daily)
+
+    return {
+        "from_date": from_date.isoformat(),
+        "to_date": to_date.isoformat(),
+        "total_paise": total_paise,
+        "daily": daily,
+        "by_service": by_service,
+    }
+
+
+@router.get("/analytics/staff")
+async def analytics_staff(
+    from_date: date = Query(...),
+    to_date: date = Query(...),
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Staff utilization: bookings per staff, completion rate, revenue generated."""
+    params: dict[str, Any] = {"tid": tenant_id, "from": from_date, "to": to_date}
+
+    result = await db.execute(
+        text(
+            "SELECT st.id, st.name, "
+            "count(b.id) AS total_bookings, "
+            "count(b.id) FILTER (WHERE b.status = 'completed') AS completed, "
+            "count(b.id) FILTER (WHERE b.status = 'cancelled') AS cancelled, "
+            "count(b.id) FILTER (WHERE b.status = 'no_show') AS no_show, "
+            "COALESCE(SUM(p.amount_paise) FILTER (WHERE p.status = 'captured'), 0) AS revenue_paise "
+            "FROM staff st "
+            "LEFT JOIN bookings b ON b.staff_id = st.id "
+            "  AND b.starts_at::date >= :from AND b.starts_at::date <= :to "
+            "LEFT JOIN payments p ON p.booking_id = b.id "
+            "WHERE st.tenant_id = :tid AND st.is_active = true "
+            "GROUP BY st.id, st.name ORDER BY total_bookings DESC"
+        ),
+        params,
+    )
+    staff_metrics = []
+    for r in result.fetchall():
+        d = _row_to_dict(r)
+        total = d.get("total_bookings", 0) or 0
+        completed = d.get("completed", 0) or 0
+        d["completion_rate"] = round(completed / total * 100, 1) if total > 0 else 0.0
+        staff_metrics.append(d)
+
+    return {
+        "from_date": from_date.isoformat(),
+        "to_date": to_date.isoformat(),
+        "staff": staff_metrics,
+    }
+
+
+# ---------------------------------------------------------------------------
+# BRANCHES
+# ---------------------------------------------------------------------------
+
+@router.get("/branches")
+async def list_branches(
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(
+        text("SELECT * FROM branches WHERE tenant_id = :tid ORDER BY is_primary DESC, name"),
+        {"tid": tenant_id},
+    )
+    return [_row_to_dict(r) for r in result.fetchall()]
+
+
+@router.post("/branches", status_code=201)
+async def create_branch(
+    body: BranchCreate,
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Add a new branch/location (enforces plan tier branch limits)."""
+    from app.billing.service import enforce_plan_limit
+    from app.exceptions import PlanLimitExceededError
+
+    try:
+        await enforce_plan_limit(db, tenant_id, "branches")
+    except PlanLimitExceededError as exc:
+        raise HTTPException(status_code=402, detail=f"Plan limit reached ({exc}). Upgrade to add more branches.")
+
+    default_hours = {d: [{"open": "09:00", "close": "20:00"}] for d in ["mon", "tue", "wed", "thu", "fri", "sat"]}
+    bid = uuid.uuid4()
+    await db.execute(
+        text("""
+            INSERT INTO branches (id, tenant_id, name, address, is_primary, operating_hours, created_at)
+            VALUES (:id, :tid, :name, :address, false, CAST(:hours AS jsonb), :now)
+        """),
+        {
+            "id": bid,
+            "tid": tenant_id,
+            "name": body.name,
+            "address": body.address,
+            "hours": _json_or_none(body.operating_hours or default_hours),
+            "now": datetime.now(timezone.utc),
+        },
+    )
+    await db.commit()
+    row = (await db.execute(text("SELECT * FROM branches WHERE id = :id"), {"id": bid})).first()
+    return _row_to_dict(row)
+
+
+@router.delete("/branches/{branch_id}", response_model=MessageResponse)
+async def delete_branch(
+    branch_id: str,
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    bid = _parse_uuid(branch_id, "branch_id")
+    res = await db.execute(
+        text("SELECT id, is_primary FROM branches WHERE id = :id AND tenant_id = :tid"),
+        {"id": bid, "tid": tenant_id},
+    )
+    row = res.first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Branch not found")
+    if row.is_primary:
+        raise HTTPException(status_code=400, detail="Cannot delete primary branch")
+
+    await db.execute(text("DELETE FROM branches WHERE id = :id AND tenant_id = :tid"), {"id": bid, "tid": tenant_id})
+    await db.commit()
+    return MessageResponse(message="Branch deleted")
+
+
+@router.put("/branches/{branch_id}")
+async def update_branch(
+    branch_id: str,
+    body: BranchUpdate,
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    bid = _parse_uuid(branch_id, "branch_id")
+    updates = body.model_dump(exclude_unset=True)
+    if not updates:
+        raise HTTPException(status_code=400, detail="No fields to update")
+
+    set_parts = []
+    for k in updates:
+        if k == "operating_hours":
+            set_parts.append(f"{k} = CAST(:{k} AS jsonb)")
+            updates[k] = _json_or_none(updates[k])
+        else:
+            set_parts.append(f"{k} = :{k}")
+
+    set_clause = ", ".join(set_parts)
+    updates["id"] = bid
+    updates["tid"] = tenant_id
+
+    result = await db.execute(
+        text(f"UPDATE branches SET {set_clause} WHERE id = :id AND tenant_id = :tid RETURNING id"),
+        updates,
+    )
+    if not result.first():
+        raise HTTPException(status_code=404, detail="Branch not found")
+    await db.commit()
+
+    result = await db.execute(
+        text("SELECT * FROM branches WHERE id = :id"), {"id": bid}
+    )
+    return _row_to_dict(result.first())
+
+
+# ---------------------------------------------------------------------------
+# VERTICALS & ONBOARDING TEMPLATES
+# ---------------------------------------------------------------------------
+
+@router.get("/verticals")
+async def get_verticals():
+    """List all supported business verticals (salons, clinics, dental, spas, tutors, etc.)."""
+    from app.verticals import list_verticals
+    return list_verticals()
+
+
+@router.post("/onboarding/apply-template", status_code=201)
+async def apply_starter_template(
+    body: ApplyTemplateRequest | None = None,
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Apply one-click starter services for the tenant's business vertical."""
+    from app.verticals import apply_vertical_template
+
+    btype = body.business_type if body and body.business_type else None
+    if not btype:
+        row = (await db.execute(text("SELECT business_type FROM tenants WHERE id = :id"), {"id": tenant_id})).first()
+        btype = row.business_type if row else "salon"
+    else:
+        await db.execute(
+            text("UPDATE tenants SET business_type = :bt, updated_at = :now WHERE id = :id"),
+            {"bt": btype, "now": datetime.now(timezone.utc), "id": tenant_id},
+        )
+        await db.commit()
+
+    created = await apply_vertical_template(db, tenant_id, btype)
+    return {"business_type": btype, "created_count": len(created), "services": created}
+
+
+# ---------------------------------------------------------------------------
+# BILLING & PLANS
+# ---------------------------------------------------------------------------
+
+@router.get("/billing/plans")
+async def get_billing_plans():
+    """List available SaaS subscription tiers."""
+    from app.billing.service import list_plans
+    return list_plans()
+
+
+@router.get("/billing/subscription")
+async def get_billing_subscription(
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Get tenant's active plan, trial status, limits, and current usage."""
+    from app.billing.service import ensure_trial_subscription, get_usage_summary
+
+    await ensure_trial_subscription(db, tenant_id)
+    await db.commit()
+    return await get_usage_summary(db, tenant_id)
+
+
+@router.put("/billing/plan")
+async def update_billing_plan(
+    body: PlanUpdateRequest,
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Switch tenant subscription tier (solo / growth / pro)."""
+    from datetime import timedelta
+
+    from app.billing.service import PLANS, get_usage_summary
+
+    if body.plan_tier not in PLANS:
+        raise HTTPException(status_code=400, detail=f"Plan must be one of: {', '.join(PLANS.keys())}")
+    if body.billing_cycle not in ("monthly", "annual"):
+        raise HTTPException(status_code=400, detail="billing_cycle must be 'monthly' or 'annual'")
+
+    now = datetime.now(timezone.utc)
+    period_end = now + timedelta(days=365 if body.billing_cycle == "annual" else 30)
+
+    await db.execute(
+        text("UPDATE tenants SET plan_tier = :tier, updated_at = :now WHERE id = :tid"),
+        {"tier": body.plan_tier, "now": now, "tid": tenant_id},
+    )
+    existing = (await db.execute(
+        text("SELECT id FROM subscriptions WHERE tenant_id = :tid LIMIT 1"), {"tid": tenant_id}
+    )).first()
+    if existing:
+        await db.execute(
+            text("""
+                UPDATE subscriptions
+                SET plan_tier = :tier, billing_cycle = :cycle, status = 'active',
+                    current_period_start = :start, current_period_end = :end
+                WHERE id = :id
+            """),
+            {"tier": body.plan_tier, "cycle": body.billing_cycle, "start": now, "end": period_end, "id": existing.id},
+        )
+    else:
+        await db.execute(
+            text("""
+                INSERT INTO subscriptions (id, tenant_id, plan_tier, billing_cycle, current_period_start, current_period_end, status)
+                VALUES (:id, :tid, :tier, :cycle, :start, :end, 'active')
+            """),
+            {"id": uuid.uuid4(), "tid": tenant_id, "tier": body.plan_tier, "cycle": body.billing_cycle, "start": now, "end": period_end},
+        )
+    await db.commit()
+    return await get_usage_summary(db, tenant_id)
+
+
+# ---------------------------------------------------------------------------
+# INTEGRATIONS (GOOGLE CALENDAR)
+# ---------------------------------------------------------------------------
+
+@router.get("/integrations/google-calendar/auth-url")
+async def get_google_calendar_auth_url(
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+):
+    """Return Google Calendar OAuth consent URL (or configured=false if keys not set)."""
+    from app.calendar_sync.service import build_oauth_url, is_google_calendar_configured
+
+    configured = is_google_calendar_configured()
+    url = build_oauth_url(state=str(tenant_id)) if configured else None
+    return {"configured": configured, "auth_url": url}
+
+

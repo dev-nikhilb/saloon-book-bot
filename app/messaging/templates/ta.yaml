@@ -1,0 +1,49 @@
+welcome_new: "{business_name}க்கு வரவேற்கிறோம்!"
+welcome_back: "மீண்டும் வரவேற்கிறோம்!"
+
+service_menu_header: "என்ன புக் செய்ய விரும்புகிறீர்கள்?"
+service_menu_item: "  {number}. {name} ({duration} நிமிடம் — ₹{price})"
+service_menu_footer: "ஒரு எண்ணை பதிலளிக்கவும் (ரத்து செய்ய 0)."
+
+date_picker_header: "📅 {service_name} — நாளைத் தேர்வு செய்யுங்கள்:"
+date_picker_footer: "ஒரு எண்ணை பதிலளிக்கவும் (ரத்து செய்ய 0)."
+
+slot_picker_header: "⏰ {service_name} — {date}:"
+slot_picker_item: "  {number}. {time} — {staff}"
+slot_picker_footer: "ஒரு எண்ணை பதிலளிக்கவும் (ரத்து செய்ய 0)."
+
+confirm_header: "✅ உறுதிப்படுத்தவும்:"
+confirm_service: "  சேவை: {service_name}"
+confirm_date: "  தேதி: {date}"
+confirm_time: "  நேரம்: {time}"
+confirm_staff: "  ஊழியர்: {staff}"
+confirm_footer: "உறுதிப்படுத்த *YES* என பதிலளிக்கவும், ரத்து செய்ய *0*."
+
+booking_confirmed: |
+  🎉 முன்பதிவு உறுதிசெய்யப்பட்டது!
+
+    சேவை: {service_name}
+    தேதி: {date}
+    நேரம்: {time}
+    ஊழியர்: {staff}
+    முன்பதிவு எண்: {booking_id}
+
+  ரத்து செய்ய *cancel {booking_id}* என டைப் செய்யுங்கள்
+  சந்திப்போம்! 🙏
+
+booking_cancelled: "ரத்து செய்யப்பட்டது. மீண்டும் தொடங்க ஏதாவது அனுப்புங்கள்."
+slot_taken: "மன்னிக்கவும், அந்த நேரம் ஏற்கனவே எடுக்கப்பட்டது. மீண்டும் முயற்சிக்கவும்."
+invalid_choice: "1 முதல் {max} வரை ஒரு எண்ணை பதிலளிக்கவும் (ரத்து செய்ய 0)."
+
+reminder: |
+  ⏰ நினைவூட்டல்: *{business_name}* இல் உங்கள் சந்திப்பு
+
+    📅 {date} — {time}
+    💇 {service_name}
+    👤 {staff}
+
+  ரத்து செய்ய *cancel* என பதிலளிக்கவும்.
+
+human_handoff: "🙋 உரிமையாளருக்கு தெரிவிக்கப்பட்டது. விரைவில் தொடர்பு கொள்வார்கள்."
+business_paused: "{business_name} தற்போது முன்பதிவுகளை ஏற்கவில்லை. பின்னர் முயற்சிக்கவும்."
+no_services: "தற்போது சேவைகள் இல்லை. பின்னர் முயற்சிக்கவும்."

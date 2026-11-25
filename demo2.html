@@ -1,0 +1,940 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BookBot — Your WhatsApp Receptionist</title>
+    <style>
+        :root {
+            --green: #25D366;
+            --green-dark: #128C7E;
+            --green-light: #DCF8C6;
+            --wa-bg: #ECE5DD;
+            --wa-header: #075E54;
+            --bubble-in: #fff;
+            --bubble-out: #DCF8C6;
+            --dark: #111827;
+            --gray: #6B7280;
+            --light: #F9FAFB;
+            --accent: #7C3AED;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            color: var(--dark);
+            overflow-x: hidden;
+        }
+
+        /* NAV */
+        nav {
+            position: fixed; top: 0; width: 100%; z-index: 100;
+            backdrop-filter: blur(20px);
+            background: rgba(255,255,255,0.85);
+            border-bottom: 1px solid rgba(0,0,0,0.06);
+            padding: 1rem 2rem;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .logo { font-size: 1.4rem; font-weight: 800; }
+        .logo span { color: var(--green); }
+        nav a { text-decoration: none; color: var(--gray); font-weight: 500; margin-left: 2rem; transition: color 0.2s; }
+        nav a:hover { color: var(--dark); }
+        .nav-cta {
+            background: var(--green); color: #fff !important; padding: 0.5rem 1.5rem;
+            border-radius: 100px; font-weight: 600;
+        }
+        .nav-cta:hover { background: var(--green-dark); }
+        .nav-links { display: flex; align-items: center; }
+
+        /* HERO */
+        .hero {
+            min-height: 100vh;
+            display: flex; align-items: center; justify-content: center;
+            padding: 6rem 2rem 4rem;
+            background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 50%, #f0f9ff 100%);
+            position: relative; overflow: hidden;
+        }
+        .hero::before {
+            content: ''; position: absolute; top: -50%; right: -20%;
+            width: 800px; height: 800px; border-radius: 50%;
+            background: radial-gradient(circle, rgba(37,211,102,0.08) 0%, transparent 70%);
+        }
+        .hero-content { max-width: 1200px; display: grid; grid-template-columns: 1fr 1fr; gap: 4rem; align-items: center; }
+        .hero-text h1 {
+            font-size: 3.5rem; font-weight: 900; line-height: 1.1;
+            background: linear-gradient(135deg, var(--dark) 0%, var(--green-dark) 100%);
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        .hero-text p { font-size: 1.25rem; color: var(--gray); margin: 1.5rem 0 2rem; line-height: 1.7; }
+        .hero-badges { display: flex; gap: 0.75rem; margin-bottom: 2rem; flex-wrap: wrap; }
+        .badge {
+            display: inline-flex; align-items: center; gap: 0.4rem;
+            padding: 0.4rem 1rem; border-radius: 100px; font-size: 0.85rem; font-weight: 600;
+            background: #fff; border: 1px solid #e5e7eb; color: var(--dark);
+        }
+        .cta-group { display: flex; gap: 1rem; flex-wrap: wrap; }
+        .btn {
+            display: inline-flex; align-items: center; gap: 0.5rem;
+            padding: 1rem 2rem; border-radius: 14px; font-size: 1.05rem;
+            font-weight: 700; text-decoration: none; transition: all 0.3s;
+            cursor: pointer; border: none;
+        }
+        .btn-primary { background: var(--green); color: #fff; box-shadow: 0 4px 20px rgba(37,211,102,0.3); }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 30px rgba(37,211,102,0.4); }
+        .btn-secondary { background: #fff; color: var(--dark); border: 2px solid #e5e7eb; }
+        .btn-secondary:hover { border-color: var(--green); }
+
+        /* WHATSAPP PHONE MOCKUP */
+        .phone-mockup {
+            width: 320px; height: 580px;
+            background: var(--wa-bg);
+            border-radius: 36px;
+            box-shadow: 0 25px 80px rgba(0,0,0,0.15), 0 0 0 8px #1a1a2e, 0 0 0 10px #2d2d44;
+            overflow: hidden;
+            position: relative;
+            margin: 0 auto;
+        }
+        .wa-header {
+            background: var(--wa-header);
+            color: #fff;
+            padding: 2.5rem 1rem 0.75rem;
+            display: flex; align-items: center; gap: 0.75rem;
+        }
+        .wa-avatar {
+            width: 36px; height: 36px; border-radius: 50%;
+            background: var(--green); display: flex; align-items: center; justify-content: center;
+            font-size: 1rem;
+        }
+        .wa-name { font-weight: 600; font-size: 0.95rem; }
+        .wa-status { font-size: 0.7rem; opacity: 0.8; }
+        .wa-chat {
+            padding: 0.75rem;
+            height: 430px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+            scroll-behavior: smooth;
+        }
+        .wa-chat::-webkit-scrollbar { width: 3px; }
+        .wa-chat::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.15); border-radius: 10px; }
+        .msg {
+            max-width: 85%;
+            padding: 0.5rem 0.7rem;
+            border-radius: 8px;
+            font-size: 0.82rem;
+            line-height: 1.5;
+            position: relative;
+            animation: msgIn 0.3s ease;
+            white-space: pre-line;
+        }
+        @keyframes msgIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .msg-in {
+            background: var(--bubble-in);
+            align-self: flex-start;
+            border-top-left-radius: 0;
+        }
+        .msg-out {
+            background: var(--bubble-out);
+            align-self: flex-end;
+            border-top-right-radius: 0;
+        }
+        .msg-time {
+            font-size: 0.6rem; color: #999; text-align: right; margin-top: 2px;
+        }
+        .wa-input {
+            position: absolute; bottom: 0; width: 100%;
+            padding: 0.5rem; background: #f0f0f0;
+            display: flex; gap: 0.5rem; align-items: center;
+        }
+        .wa-input input {
+            flex: 1; padding: 0.6rem 1rem; border-radius: 20px;
+            border: none; font-size: 0.85rem; outline: none;
+        }
+        .wa-input button {
+            width: 36px; height: 36px; border-radius: 50%;
+            background: var(--green); border: none; color: #fff;
+            font-size: 1.1rem; cursor: pointer; display: flex;
+            align-items: center; justify-content: center;
+        }
+        .typing-indicator {
+            display: flex; gap: 4px; padding: 0.5rem 0.7rem;
+            background: var(--bubble-in); border-radius: 8px;
+            align-self: flex-start; border-top-left-radius: 0;
+        }
+        .typing-dot {
+            width: 6px; height: 6px; border-radius: 50%;
+            background: #999; animation: typingBounce 1.4s infinite;
+        }
+        .typing-dot:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dot:nth-child(3) { animation-delay: 0.4s; }
+        @keyframes typingBounce {
+            0%, 60%, 100% { transform: translateY(0); }
+            30% { transform: translateY(-4px); }
+        }
+
+        /* SECTIONS */
+        section { padding: 5rem 2rem; }
+        .section-title {
+            text-align: center; font-size: 2.5rem; font-weight: 800; margin-bottom: 1rem;
+        }
+        .section-subtitle {
+            text-align: center; color: var(--gray); font-size: 1.15rem; max-width: 600px; margin: 0 auto 3rem;
+        }
+
+        /* HOW IT WORKS */
+        .how-it-works { background: #fff; }
+        .steps {
+            display: grid; grid-template-columns: repeat(3, 1fr); gap: 2rem;
+            max-width: 1000px; margin: 0 auto;
+        }
+        .step {
+            text-align: center; padding: 2rem;
+            border-radius: 20px; transition: transform 0.3s;
+        }
+        .step:hover { transform: translateY(-5px); }
+        .step-number {
+            width: 56px; height: 56px; border-radius: 16px;
+            background: linear-gradient(135deg, var(--green), var(--green-dark));
+            color: #fff; font-size: 1.5rem; font-weight: 800;
+            display: flex; align-items: center; justify-content: center;
+            margin: 0 auto 1.25rem;
+        }
+        .step h3 { font-size: 1.15rem; margin-bottom: 0.5rem; }
+        .step p { color: var(--gray); font-size: 0.95rem; line-height: 1.6; }
+
+        /* FEATURES */
+        .features { background: var(--light); }
+        .feature-grid {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1.5rem; max-width: 1100px; margin: 0 auto;
+        }
+        .feature-card {
+            background: #fff; padding: 2rem; border-radius: 16px;
+            border: 1px solid #f3f4f6; transition: all 0.3s;
+        }
+        .feature-card:hover {
+            border-color: var(--green); box-shadow: 0 10px 30px rgba(37,211,102,0.08);
+            transform: translateY(-3px);
+        }
+        .feature-icon {
+            font-size: 2rem; margin-bottom: 1rem;
+            width: 50px; height: 50px; display: flex; align-items: center; justify-content: center;
+            border-radius: 12px; background: #f0fdf4;
+        }
+        .feature-card h3 { font-size: 1.1rem; margin-bottom: 0.5rem; }
+        .feature-card p { color: var(--gray); font-size: 0.9rem; line-height: 1.6; }
+
+        /* OWNER DEMO */
+        .owner-demo { background: #fff; }
+        .owner-grid {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 4rem;
+            max-width: 1100px; margin: 0 auto; align-items: center;
+        }
+        .command-list { list-style: none; }
+        .command-list li {
+            padding: 1rem; margin-bottom: 0.75rem;
+            background: var(--light); border-radius: 12px;
+            display: flex; align-items: center; gap: 1rem;
+            cursor: pointer; transition: all 0.2s;
+            border: 2px solid transparent;
+        }
+        .command-list li:hover, .command-list li.active {
+            border-color: var(--green); background: #f0fdf4;
+        }
+        .cmd-icon { font-size: 1.5rem; }
+        .cmd-text code {
+            background: #e5e7eb; padding: 0.15rem 0.5rem; border-radius: 4px;
+            font-size: 0.85rem; font-weight: 600;
+        }
+        .cmd-desc { font-size: 0.85rem; color: var(--gray); }
+
+        /* PRICING */
+        .pricing { background: var(--light); }
+        .pricing-card {
+            max-width: 480px; margin: 0 auto;
+            background: #fff; border-radius: 24px;
+            padding: 3rem; text-align: center;
+            border: 2px solid var(--green);
+            box-shadow: 0 20px 60px rgba(37,211,102,0.1);
+            position: relative; overflow: hidden;
+        }
+        .pricing-card::before {
+            content: 'MOST POPULAR'; position: absolute; top: 20px; right: -35px;
+            background: var(--green); color: #fff; padding: 0.3rem 3rem;
+            font-size: 0.7rem; font-weight: 700; transform: rotate(45deg);
+        }
+        .price { font-size: 3.5rem; font-weight: 900; }
+        .price span { font-size: 1.2rem; color: var(--gray); font-weight: 400; }
+        .pricing-features {
+            list-style: none; text-align: left; margin: 2rem 0;
+        }
+        .pricing-features li {
+            padding: 0.6rem 0; font-size: 0.95rem;
+            display: flex; align-items: center; gap: 0.75rem;
+        }
+        .pricing-features li::before { content: '✅'; }
+
+        /* TESTIMONIAL */
+        .testimonials { background: #fff; }
+        .testimonial-grid {
+            display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem; max-width: 1000px; margin: 0 auto;
+        }
+        .testimonial {
+            padding: 2rem; border-radius: 16px; background: var(--light);
+            border: 1px solid #f3f4f6;
+        }
+        .testimonial-text { font-style: italic; color: var(--dark); line-height: 1.7; margin-bottom: 1rem; }
+        .testimonial-author { font-weight: 700; font-size: 0.9rem; }
+        .testimonial-role { font-size: 0.8rem; color: var(--gray); }
+        .stars { color: #f59e0b; margin-bottom: 0.75rem; }
+
+        /* FOOTER */
+        footer {
+            background: var(--dark); color: #fff; padding: 3rem 2rem;
+            text-align: center;
+        }
+        footer p { color: rgba(255,255,255,0.6); font-size: 0.9rem; }
+        footer a { color: var(--green); text-decoration: none; }
+
+        /* CTA SECTION */
+        .final-cta {
+            background: linear-gradient(135deg, var(--wa-header) 0%, var(--green-dark) 100%);
+            color: #fff; text-align: center; padding: 5rem 2rem;
+        }
+        .final-cta h2 { font-size: 2.5rem; margin-bottom: 1rem; }
+        .final-cta p { font-size: 1.15rem; opacity: 0.9; margin-bottom: 2rem; }
+        .btn-white { background: #fff; color: var(--green-dark); }
+        .btn-white:hover { transform: translateY(-2px); box-shadow: 0 8px 30px rgba(0,0,0,0.2); }
+
+        /* RESPONSIVE */
+        @media (max-width: 768px) {
+            .hero-content { grid-template-columns: 1fr; text-align: center; }
+            .hero-text h1 { font-size: 2.5rem; }
+            .steps { grid-template-columns: 1fr; }
+            .owner-grid { grid-template-columns: 1fr; }
+            .phone-mockup { width: 290px; height: 540px; }
+            .nav-links a:not(.nav-cta) { display: none; }
+            .cta-group { justify-content: center; }
+            .hero-badges { justify-content: center; }
+        }
+
+        /* SCROLL ANIMATION */
+        .reveal {
+            opacity: 0; transform: translateY(30px);
+            transition: opacity 0.6s, transform 0.6s;
+        }
+        .reveal.visible { opacity: 1; transform: translateY(0); }
+    </style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+    <div class="logo">Book<span>Bot</span></div>
+    <div class="nav-links">
+        <a href="#features">Features</a>
+        <a href="#how">How it works</a>
+        <a href="#pricing">Pricing</a>
+        <a href="#demo" class="nav-cta">Try Demo</a>
+    </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+    <div class="hero-content">
+        <div class="hero-text">
+            <div class="hero-badges">
+                <span class="badge">🇮🇳 Made for India</span>
+                <span class="badge">💬 WhatsApp Native</span>
+                <span class="badge">⚡ Zero Double-Bookings</span>
+            </div>
+            <h1>Your salon's WhatsApp receptionist</h1>
+            <p>Customers book by chatting. You manage by texting. No app downloads. No dashboards. No missed appointments. Just WhatsApp.</p>
+            <div class="cta-group">
+                <a href="#demo" class="btn btn-primary">💬 Try Live Demo</a>
+                <a href="#how" class="btn btn-secondary">See how it works</a>
+            </div>
+        </div>
+        <div class="hero-phone" id="demo">
+            <div class="demo-tabs">
+                <button class="demo-tab active" data-mode="multi" onclick="switchDemo('multi',this)">💇 Multi-Staff Salon</button>
+                <button class="demo-tab" data-mode="solo" onclick="switchDemo('solo',this)">✂️ Solo Barber</button>
+                <button class="demo-tab" data-mode="owner" onclick="switchDemo('owner',this)">👤 Owner View</button>
+            </div>
+            <div class="phone-mockup">
+                <div class="wa-header">
+                    <div class="wa-avatar" id="demoAvatar">💇</div>
+                    <div>
+                        <div class="wa-name" id="demoName">Style Studio</div>
+                        <div class="wa-status">online</div>
+                    </div>
+                </div>
+                <div class="wa-chat" id="chat"></div>
+                <div class="wa-input" id="chatInputWrap">
+                    <input type="text" id="chatInput" placeholder="Type a message..." autocomplete="off">
+                    <button onclick="sendUserMessage()">➤</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section class="how-it-works" id="how">
+    <h2 class="section-title reveal">How it works</h2>
+    <p class="section-subtitle reveal">Three steps. Five minutes. Your salon is live on WhatsApp.</p>
+    <div class="steps">
+        <div class="step reveal">
+            <div class="step-number">1</div>
+            <h3>Tell us about your salon</h3>
+            <p>Business name, services, timings. All via WhatsApp — no forms, no websites.</p>
+        </div>
+        <div class="step reveal">
+            <div class="step-number">2</div>
+            <h3>Share your WhatsApp link</h3>
+            <p>Put your booking link on Instagram, Google, or your shop door. Customers tap and chat.</p>
+        </div>
+        <div class="step reveal">
+            <div class="step-number">3</div>
+            <h3>Bookings flow in</h3>
+            <p>Customers pick service → date → time → confirmed. You get notified. Zero phone calls.</p>
+        </div>
+    </div>
+</section>
+
+<!-- FEATURES -->
+<section class="features" id="features">
+    <h2 class="section-title reveal">Everything your salon needs</h2>
+    <p class="section-subtitle reveal">And nothing it doesn't.</p>
+    <div class="feature-grid">
+        <div class="feature-card reveal">
+            <div class="feature-icon">📅</div>
+            <h3>Smart booking</h3>
+            <p>Real-time availability. Customers see only open slots. Database-level protection against double bookings.</p>
+        </div>
+        <div class="feature-card reveal">
+            <div class="feature-icon">⏰</div>
+            <h3>Auto reminders</h3>
+            <p>2-hour appointment reminders via WhatsApp. Reduce no-shows by 60% without lifting a finger.</p>
+        </div>
+        <div class="feature-card reveal">
+            <div class="feature-icon">👤</div>
+            <h3>Owner commands</h3>
+            <p>Text "today" to see your schedule. "Block 4-6pm" to take a break. Manage your salon from WhatsApp.</p>
+        </div>
+        <div class="feature-card reveal">
+            <div class="feature-icon">🌐</div>
+            <h3>Tamil, Hindi, English</h3>
+            <p>Your customers chat in their language. BookBot replies in theirs. No translation needed.</p>
+        </div>
+        <div class="feature-card reveal">
+            <div class="feature-icon">🔒</div>
+            <h3>Zero double bookings</h3>
+            <p>Bank-grade database constraints. Even if two customers book the same slot simultaneously, only one gets through.</p>
+        </div>
+        <div class="feature-card reveal">
+            <div class="feature-icon">📊</div>
+            <h3>Weekly stats</h3>
+            <p>Text "stats" to get your no-show rate, booking count, and customer count. Simple. No dashboard needed.</p>
+        </div>
+    </div>
+</section>
+
+<!-- OWNER DEMO -->
+<section class="owner-demo">
+    <h2 class="section-title reveal">Manage your salon by texting</h2>
+    <p class="section-subtitle reveal">No app. No login. Just WhatsApp.</p>
+    <div class="owner-grid">
+        <ul class="command-list reveal">
+            <li class="active" onclick="showOwnerDemo('today',this)">
+                <span class="cmd-icon">📅</span>
+                <div>
+                    <div class="cmd-text"><code>today</code></div>
+                    <div class="cmd-desc">See all today's appointments</div>
+                </div>
+            </li>
+            <li onclick="showOwnerDemo('stats',this)">
+                <span class="cmd-icon">📊</span>
+                <div>
+                    <div class="cmd-text"><code>stats</code></div>
+                    <div class="cmd-desc">Weekly performance summary</div>
+                </div>
+            </li>
+            <li onclick="showOwnerDemo('block',this)">
+                <span class="cmd-icon">🚫</span>
+                <div>
+                    <div class="cmd-text"><code>block tomorrow 4-6pm</code></div>
+                    <div class="cmd-desc">Block time for lunch or break</div>
+                </div>
+            </li>
+            <li onclick="showOwnerDemo('cancel',this)">
+                <span class="cmd-icon">❌</span>
+                <div>
+                    <div class="cmd-text"><code>cancel a3f2</code></div>
+                    <div class="cmd-desc">Cancel a booking by ID</div>
+                </div>
+            </li>
+            <li onclick="showOwnerDemo('pause',this)">
+                <span class="cmd-icon">⏸️</span>
+                <div>
+                    <div class="cmd-text"><code>pause</code> / <code>resume</code></div>
+                    <div class="cmd-desc">Temporarily stop new bookings</div>
+                </div>
+            </li>
+        </ul>
+        <div class="reveal">
+            <div class="phone-mockup" style="height:420px;">
+                <div class="wa-header" style="padding-top:1.5rem;">
+                    <div class="wa-avatar">🤖</div>
+                    <div>
+                        <div class="wa-name">BookBot</div>
+                        <div class="wa-status">online</div>
+                    </div>
+                </div>
+                <div class="wa-chat" id="ownerChat" style="height:310px;"></div>
+            </div>
+        </div>
+    </div>
+</section>
+
+<!-- PRICING -->
+<section class="pricing" id="pricing">
+    <h2 class="section-title reveal">Simple pricing</h2>
+    <p class="section-subtitle reveal">One plan. Everything included. No surprises.</p>
+    <div class="pricing-card reveal">
+        <div class="price">₹999<span>/month</span></div>
+        <p style="color:var(--gray); margin-top:0.5rem;">Everything your salon needs</p>
+        <ul class="pricing-features">
+            <li>Unlimited bookings</li>
+            <li>WhatsApp booking for customers</li>
+            <li>Owner commands via WhatsApp</li>
+            <li>Auto reminders (2h before)</li>
+            <li>Multi-language (EN, Tamil, Hindi)</li>
+            <li>Smart slot management</li>
+            <li>Zero double-booking guarantee</li>
+            <li>Weekly stats via WhatsApp</li>
+            <li>5-minute setup</li>
+        </ul>
+        <a href="#demo" class="btn btn-primary" style="width:100%; justify-content:center; margin-top:1rem;">Start Free Trial →</a>
+        <p style="font-size:0.8rem; color:var(--gray); margin-top:1rem;">14-day free trial. No card required.</p>
+    </div>
+</section>
+
+<!-- TESTIMONIALS -->
+<section class="testimonials">
+    <h2 class="section-title reveal">Salon owners love it</h2>
+    <div class="testimonial-grid" style="margin-top:2rem;">
+        <div class="testimonial reveal">
+            <div class="stars">★★★★★</div>
+            <p class="testimonial-text">"My customers used to call and I'd miss half the bookings. Now they just text and it's done. I check 'today' every morning and my schedule is ready."</p>
+            <div class="testimonial-author">Priya K.</div>
+            <div class="testimonial-role">Style Studio, Chennai</div>
+        </div>
+        <div class="testimonial reveal">
+            <div class="stars">★★★★★</div>
+            <p class="testimonial-text">"No-shows dropped by 50% after the auto reminders. And my staff doesn't need to learn any software — it's just WhatsApp."</p>
+            <div class="testimonial-author">Rajesh M.</div>
+            <div class="testimonial-role">Classic Cuts Barbershop, Bangalore</div>
+        </div>
+        <div class="testimonial reveal">
+            <div class="stars">★★★★★</div>
+            <p class="testimonial-text">"I set it up in 5 minutes. My Tamil-speaking customers love that the bot replies in Tamil. Game changer for my parlour."</p>
+            <div class="testimonial-author">Lakshmi S.</div>
+            <div class="testimonial-role">Lakshmi Beauty Parlour, Madurai</div>
+        </div>
+    </div>
+</section>
+
+<!-- FINAL CTA -->
+<section class="final-cta">
+    <h2>Stop missing bookings today</h2>
+    <p>Set up in 5 minutes. Your customers book on WhatsApp. You never miss an appointment again.</p>
+    <a href="#demo" class="btn btn-white">💬 Try the Demo</a>
+</section>
+
+<!-- FOOTER -->
+<footer>
+    <div class="logo" style="margin-bottom:1rem;">Book<span>Bot</span></div>
+    <p>Built for Indian salons. Powered by WhatsApp.</p>
+    <p style="margin-top:1rem;"><a href="#">Privacy</a> · <a href="#">Terms</a> · <a href="#">Support</a></p>
+</footer>
+
+<style>
+    /* Interactive message styles */
+    .wa-buttons { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+    .wa-btn {
+        padding: 6px 14px; border-radius: 8px; font-size: 0.78rem; font-weight: 600;
+        cursor: pointer; transition: all 0.2s; border: 1.5px solid var(--green);
+        background: #fff; color: var(--green-dark); text-align: center;
+        flex: 1; min-width: 80px;
+    }
+    .wa-btn:hover { background: var(--green); color: #fff; }
+    .wa-list-btn {
+        display: block; width: 100%; padding: 8px; margin-top: 6px;
+        border-radius: 8px; font-size: 0.78rem; font-weight: 600;
+        cursor: pointer; background: var(--green); color: #fff;
+        border: none; text-align: center;
+    }
+    .wa-list-btn:hover { background: var(--green-dark); }
+    .wa-list-panel {
+        background: #fff; border-radius: 8px; margin-top: 4px;
+        border: 1px solid #e5e7eb; overflow: hidden;
+        animation: slideDown 0.2s ease;
+    }
+    @keyframes slideDown {
+        from { opacity: 0; max-height: 0; }
+        to { opacity: 1; max-height: 500px; }
+    }
+    .wa-list-item {
+        padding: 10px 12px; cursor: pointer; border-bottom: 1px solid #f3f4f6;
+        transition: background 0.15s;
+    }
+    .wa-list-item:last-child { border-bottom: none; }
+    .wa-list-item:hover { background: #f0fdf4; }
+    .wa-list-title { font-size: 0.82rem; font-weight: 600; color: var(--dark); }
+    .wa-list-desc { font-size: 0.7rem; color: var(--gray); margin-top: 1px; }
+    .msg-footer { font-size: 0.65rem; color: #999; margin-top: 4px; border-top: 1px solid #f0f0f0; padding-top: 4px; }
+    .demo-tabs { display: flex; gap: 4px; margin-bottom: 10px; justify-content: center; flex-wrap: wrap; }
+    .demo-tab {
+        padding: 6px 12px; border-radius: 20px; font-size: 0.72rem; font-weight: 600;
+        border: 1.5px solid #e5e7eb; background: #fff; color: var(--gray);
+        cursor: pointer; transition: all 0.2s; white-space: nowrap;
+    }
+    .demo-tab.active { border-color: var(--green); background: #f0fdf4; color: var(--green-dark); }
+    .demo-tab:hover { border-color: var(--green); }
+    .staff-card {
+        display: flex; align-items: center; gap: 8px; padding: 8px;
+        background: #f9fafb; border-radius: 8px; margin: 3px 0;
+        cursor: pointer; border: 1.5px solid transparent; transition: all 0.15s;
+    }
+    .staff-card:hover { border-color: var(--green); background: #f0fdf4; }
+    .staff-avatar { width: 32px; height: 32px; border-radius: 50%; background: var(--green-light);
+        display: flex; align-items: center; justify-content: center; font-size: 0.9rem; flex-shrink: 0; }
+    .staff-info { flex: 1; }
+    .staff-name { font-size: 0.8rem; font-weight: 600; }
+    .staff-spec { font-size: 0.68rem; color: var(--gray); }
+</style>
+<script>
+// ====== DEMO CONFIGS ======
+const DEMOS = {
+    multi: {
+        name: 'Style Studio', avatar: '💇',
+        services: [
+            { name:'Haircut', icon:'💇', dur:30, price:500 },
+            { name:'Beard Trim', icon:'✂️', dur:15, price:200 },
+            { name:'Hair Color', icon:'🎨', dur:90, price:2000 },
+            { name:'Facial', icon:'✨', dur:60, price:1500 },
+            { name:'Head Massage', icon:'💆', dur:30, price:400 },
+        ],
+        staff: [
+            { name:'Ravi', emoji:'👨', spec:'Cuts & Styling · 5 yrs exp', times:['10:00 AM','10:30 AM','11:00 AM','2:00 PM','3:00 PM','4:00 PM'] },
+            { name:'Meena', emoji:'👩', spec:'Color Specialist · 8 yrs exp', times:['10:00 AM','11:00 AM','11:30 AM','2:30 PM','3:30 PM','4:30 PM'] },
+            { name:'Deepa', emoji:'👩', spec:'Bridal & Facials · 3 yrs exp', times:['10:30 AM','11:30 AM','2:00 PM','3:00 PM'] },
+        ],
+        isSolo: false,
+    },
+    solo: {
+        name: "Karthik's Cuts", avatar: '✂️',
+        services: [
+            { name:'Haircut', icon:'✂️', dur:30, price:200 },
+            { name:'Beard Trim', icon:'🪒', dur:15, price:100 },
+            { name:'Hair Wash', icon:'🧴', dur:20, price:150 },
+            { name:'Head Massage', icon:'💆', dur:25, price:180 },
+        ],
+        staff: [
+            { name:'Karthik', emoji:'👨', spec:'Owner', times:['9:00 AM','9:30 AM','10:00 AM','10:30 AM','11:00 AM','2:00 PM','2:30 PM','3:00 PM','3:30 PM','4:00 PM'] },
+        ],
+        isSolo: true,
+    },
+    owner: { name: 'Style Studio', avatar: '💇' },
+};
+
+// ====== ENGINE ======
+let cfg, sel={}, bookings=[], currentDemo='multi';
+const chat = document.getElementById('chat'), chatInput = document.getElementById('chatInput');
+const T = () => new Date().toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit',hour12:true});
+const B = t => t.replace(/\*([^*]+)\*/g,'<strong>$1</strong>').replace(/_([^_]+)_/g,'<em>$1</em>');
+const rid = () => Math.random().toString(36).substr(2,8);
+
+function getDates() {
+    const d=new Date(), o=[];
+    for(let i=0;i<5;i++){const dt=new Date(d);dt.setDate(d.getDate()+i);
+    o.push({label:i===0?'Today':i===1?'Tomorrow':dt.toLocaleDateString('en-IN',{weekday:'long'}),
+    full:dt.toLocaleDateString('en-IN',{weekday:'long',day:'numeric',month:'short'})});}return o;
+}
+function addMsg(h,type,extra){const d=document.createElement('div');d.className=`msg ${type}`;
+    d.innerHTML=h+`<div class="msg-time">${T()}</div>`;if(extra)d.appendChild(extra);
+    chat.appendChild(d);chat.scrollTop=chat.scrollHeight;return d;}
+function typ(cb){const d=document.createElement('div');d.className='typing-indicator';d.id='typing';
+    d.innerHTML='<div class="typing-dot"></div><div class="typing-dot"></div><div class="typing-dot"></div>';
+    chat.appendChild(d);chat.scrollTop=chat.scrollHeight;setTimeout(()=>{d.remove();cb();},450+Math.random()*350);}
+function mkBtns(bs){const w=document.createElement('div');w.className='wa-buttons';
+    bs.forEach(b=>{const e=document.createElement('button');e.className='wa-btn';e.textContent=b.t;
+    e.onclick=()=>{addMsg(b.t,'msg-out');b.a();};w.appendChild(e);});return w;}
+function mkList(bt,items){const w=document.createElement('div');
+    const b=document.createElement('button');b.className='wa-list-btn';b.textContent=bt;
+    b.onclick=()=>{const x=w.querySelector('.wa-list-panel');if(x){x.remove();return;}
+    const p=document.createElement('div');p.className='wa-list-panel';
+    items.forEach(it=>{const r=document.createElement('div');r.className='wa-list-item';
+    r.innerHTML=`<div class="wa-list-title">${it.t}</div>`+(it.d?`<div class="wa-list-desc">${it.d}</div>`:'');
+    r.onclick=()=>{addMsg(it.t,'msg-out');it.a();};p.appendChild(r);});w.appendChild(p);};w.appendChild(b);return w;}
+function mkStaffCards(staff, onPick) {
+    const w = document.createElement('div');
+    staff.forEach(s => {
+        const c = document.createElement('div'); c.className = 'staff-card';
+        c.innerHTML = `<div class="staff-avatar">${s.emoji}</div><div class="staff-info"><div class="staff-name">${s.name}</div><div class="staff-spec">${s.spec}</div></div>`;
+        c.onclick = () => { addMsg(`👤 ${s.name}`, 'msg-out'); onPick(s); };
+        w.appendChild(c);
+    });
+    return w;
+}
+
+// ---- SCREENS ----
+function showStart(){
+    const has = bookings.filter(b=>!b.cancelled).length>0;
+    typ(()=>{
+        const btns = has ? [{t:'📋 My Bookings',a:showMyBookings}] : [];
+        const list = mkList('📅 View Services & Book', cfg.services.map(s=>({
+            t:`${s.icon} ${s.name}`, d:`${s.dur}min · ₹${s.price}`, a:()=>{sel.svc=s;showDates();}
+        })));
+        const msg = addMsg(B(`Hi! Welcome to *${cfg.name}* 👋\n\nTap below to book:`),'msg-in', btns.length?mkBtns(btns):null);
+        msg.appendChild(list);
+    });
+}
+
+function showDates(){
+    typ(()=>{
+        const list = mkList('View Dates', getDates().map(d=>({
+            t:`📅 ${d.label}`, d:d.full, a:()=>{sel.date=d; cfg.isSolo ? showSlotsSolo() : showStaffPicker();}
+        })));
+        addMsg(B(`📅 *${sel.svc.name}*\n\nPick a date:`),'msg-in').appendChild(list);
+    });
+}
+
+function showStaffPicker(){
+    // Multi-staff: pick artist or "any available"
+    const booked = new Set(bookings.filter(b=>b.date===sel.date.label&&!b.cancelled).map(b=>b.staff.name+b.time));
+    const availableStaff = cfg.staff.filter(s => s.times.some(t => !booked.has(s.name+t)));
+    if(!availableStaff.length){
+        typ(()=>addMsg(B(`No artists available on *${sel.date.label}*. Try another date.`),'msg-in',
+            mkBtns([{t:'📅 Pick Another Date',a:showDates}])));
+        return;
+    }
+    typ(()=>{
+        const msg = addMsg(B(`👤 *Pick your artist:*\n\n_Or choose "Any Available" for the earliest slot_`),'msg-in');
+        // "Any Available" button
+        const anyBtn = document.createElement('div'); anyBtn.className='staff-card';
+        anyBtn.innerHTML=`<div class="staff-avatar">⚡</div><div class="staff-info"><div class="staff-name">Any Available</div><div class="staff-spec">First available slot across all artists</div></div>`;
+        anyBtn.onclick=()=>{addMsg('⚡ Any Available','msg-out'); sel.staffFilter=null; showSlotsMulti(availableStaff);};
+        msg.appendChild(anyBtn);
+        // Staff cards
+        msg.appendChild(mkStaffCards(availableStaff, s => { sel.staffFilter=s; showSlotsMulti([s]); }));
+    });
+}
+
+function showSlotsMulti(staffList){
+    const booked = new Set(bookings.filter(b=>b.date===sel.date.label&&!b.cancelled).map(b=>b.staff.name+b.time));
+    const avail = [];
+    staffList.forEach(s => s.times.forEach(t => { if(!booked.has(s.name+t)) avail.push({time:t,staff:s}); }));
+    avail.sort((a,b) => a.time.localeCompare(b.time));
+    const unique = []; const seen = new Set();
+    avail.forEach(a => { const k=a.time+a.staff.name; if(!seen.has(k)){seen.add(k);unique.push(a);} });
+    if(!unique.length){
+        typ(()=>addMsg(B(`No slots available. Try another date.`),'msg-in',mkBtns([{t:'📅 Pick Another Date',a:showDates}])));
+        return;
+    }
+    typ(()=>{
+        const showStaffName = !sel.staffFilter; // show names only in "any available" mode
+        const list = mkList('View Times', unique.slice(0,10).map(s=>({
+            t: showStaffName ? `${s.time} — ${s.staff.name}` : s.time,
+            d: showStaffName ? s.staff.spec : '',
+            a:()=>{sel.time=s.time;sel.staff=s.staff;showConfirm();}
+        })));
+        const header = sel.staffFilter
+            ? `⏰ *${sel.svc.name}* with *${sel.staffFilter.name}* on *${sel.date.label}*`
+            : `⏰ *${sel.svc.name}* on *${sel.date.label}*`;
+        addMsg(B(header+'\n\nPick a time:'),'msg-in').appendChild(list);
+    });
+}
+
+function showSlotsSolo(){
+    const booked = new Set(bookings.filter(b=>b.date===sel.date.label&&!b.cancelled).map(b=>b.time));
+    const s = cfg.staff[0];
+    const avail = s.times.filter(t=>!booked.has(t));
+    if(!avail.length){
+        typ(()=>addMsg(B(`Fully booked on *${sel.date.label}*! Try another date.`),'msg-in',
+            mkBtns([{t:'📅 Pick Another Date',a:showDates}])));
+        return;
+    }
+    typ(()=>{
+        const list = mkList('View Times', avail.slice(0,10).map(t=>({
+            t:t, d:'', a:()=>{sel.time=t;sel.staff=s;showConfirm();}
+        })));
+        addMsg(B(`⏰ *${sel.svc.name}* on *${sel.date.label}*\n\nPick a time:`),'msg-in').appendChild(list);
+    });
+}
+
+function showConfirm(){
+    const lines = [`✅ *Confirm your booking:*\n`,`${sel.svc.icon} ${sel.svc.name}`,`📅 ${sel.date.full}`,`⏰ ${sel.time}`];
+    if(!cfg.isSolo) lines.push(`👤 ${sel.staff.name}`,`_${sel.staff.spec}_`);
+    typ(()=>addMsg(B(lines.join('\n')),'msg-in',mkBtns([{t:'✅ Confirm',a:doBook},{t:'❌ Cancel',a:showStart}])));
+}
+
+function doBook(){
+    const id=rid();
+    bookings.push({id,svc:sel.svc,date:sel.date.label,dateFull:sel.date.full,time:sel.time,staff:sel.staff,cancelled:false});
+    const lines = [`🎉 *Booking confirmed!*\n`,`${sel.svc.icon} ${sel.svc.name}`,`📅 ${sel.date.full}`,`⏰ ${sel.time}`];
+    if(!cfg.isSolo) lines.push(`👤 ${sel.staff.name}`);
+    lines.push(`🆔 ${id}`);
+    typ(()=>addMsg(B(lines.join('\n'))+`<div class="msg-footer">See you then! 🙏</div>`,'msg-in',
+        mkBtns([{t:'📅 Book Another',a:()=>{sel={};showStart();}},{t:'❌ Cancel This',a:()=>confirmCancel(id)}])));
+}
+
+function showMyBookings(){
+    const active = bookings.filter(b=>!b.cancelled);
+    if(!active.length){typ(()=>addMsg('No upcoming bookings.','msg-in',mkBtns([{t:'📅 Book Now',a:showStart}])));return;}
+    typ(()=>{
+        const list = mkList('View Bookings', active.map(b=>({
+            t:`${b.svc.icon} ${b.svc.name}`, d:`${b.dateFull} ${b.time}`+(cfg.isSolo?'':`· ${b.staff.name}`),
+            a:()=>confirmCancel(b.id)
+        })));
+        addMsg(B(`📋 *Your bookings (${active.length}):*`),'msg-in').appendChild(list);
+    });
+}
+
+function confirmCancel(id){
+    const b=bookings.find(x=>x.id===id);if(!b){showStart();return;}
+    const lines = [`*Manage this booking:*\n`,`${b.svc.icon} ${b.svc.name}`,`📅 ${b.dateFull}`,`⏰ ${b.time}`];
+    if(!cfg.isSolo) lines.push(`👤 ${b.staff.name}`);
+    lines.push(`🆔 ${b.id}`);
+    typ(()=>addMsg(B(lines.join('\n')),'msg-in',mkBtns([
+        {t:'❌ Cancel',a:()=>{b.cancelled=true;typ(()=>addMsg('❌ Cancelled.','msg-in',
+            mkBtns([{t:'📅 Book Again',a:()=>{sel={};showStart();}},{t:'🔄 Rebook Same',a:()=>{sel.svc=b.svc;showDates();}}])));}},
+        {t:'🔄 Reschedule',a:()=>{sel.svc=b.svc;b.cancelled=true;showDates();}},
+        {t:'👍 Keep It',a:()=>{typ(()=>addMsg('👍 Kept!','msg-in',mkBtns([{t:'📅 Book Another',a:showStart}])));}}
+    ])));
+}
+
+// ---- OWNER MODE ----
+function showOwnerMode(){
+    var ownerCmds = [
+        {cmd:'today', reply:'📅 <strong>Today</strong> (3 bookings):<br><br>✅ 10:00 AM — Haircut — Arun<br>  ID: a3f2 | Ravi<br>✅ 11:30 AM — Facial — Preethi<br>  ID: b7e4 | Meena<br>✅ 3:00 PM — Beard Trim — Kumar<br>  ID: c9f1 | Ravi'},
+        {cmd:'stats', reply:'📊 <strong>This week:</strong><br>Total: 24 | ✅ 8 | ✔️ 14 | ❌ 1 | 👻 1 (4%)<br>👥 18 unique customers'},
+        {cmd:'free', reply:'📅 <strong>Today</strong> free slots:<br>Ravi: 10am, 10:30am, 2pm, 4pm<br>Meena: 11am, 2:30pm, 3:30pm'},
+        {cmd:'services', reply:'💇 <strong>Your services:</strong><br>• Haircut — 30min — ₹500 (+10min buffer)<br>• Beard Trim — 15min — ₹200<br>• Facial — 60min — ₹1500'},
+        {cmd:'staff', reply:'👥 <strong>Your team:</strong><br>• <strong>Ravi</strong> — Cuts & Styling<br>• <strong>Meena</strong> — Color & Facials<br>• <strong>Deepa</strong> — Bridal & Facials'},
+        {cmd:'add service Pedicure 45 800', reply:'✅ Added: <strong>Pedicure</strong> (45min, ₹800)'},
+        {cmd:'set buffer 10', reply:'✅ 10min buffer set between all bookings.'},
+        {cmd:'block tomorrow 4-6pm', reply:'🚫 Blocked <strong>Tomorrow 4-6 PM</strong> for 3 staff.'},
+        {cmd:'cancel a3f2', reply:'❌ Booking <strong>a3f2</strong> cancelled.'},
+        {cmd:'help', reply:'🔧 <strong>Commands:</strong><br><br><strong>📅 Schedule</strong><br>today · tomorrow · free · stats<br><br><strong>🔧 Manage</strong><br>services · staff · add service<br><br><strong>⚡ Actions</strong><br>cancel · block · pause · resume'},
+    ];
+    var ownerIdx = 0;
+    function ownerNext(){
+        if(ownerIdx >= ownerCmds.length) ownerIdx = 0;
+        var item = ownerCmds[ownerIdx]; ownerIdx++;
+        // Show owner's command as outbound
+        var outDiv = document.createElement('div'); outDiv.className='msg msg-out';
+        outDiv.innerHTML = item.cmd + '<div class="msg-time">'+T()+'</div>';
+        chat.appendChild(outDiv); chat.scrollTop = chat.scrollHeight;
+        // Show bot reply after delay
+        setTimeout(function(){
+            var inDiv = document.createElement('div'); inDiv.className='msg msg-in';
+            inDiv.innerHTML = item.reply + '<div class="msg-time">'+T()+'</div>';
+            // Add next button
+            var btnW = document.createElement('div'); btnW.className='wa-buttons';
+            var btn = document.createElement('button'); btn.className='wa-btn'; btn.textContent='Next command →';
+            btn.onclick = function(){ addMsg('Next command →','msg-out'); ownerNext(); };
+            btnW.appendChild(btn); inDiv.appendChild(btnW);
+            chat.appendChild(inDiv); chat.scrollTop = chat.scrollHeight;
+        }, 500);
+    }
+    // Show intro
+    var intro = document.createElement('div'); intro.className='msg msg-in';
+    intro.innerHTML = '<strong>👤 Owner mode</strong><br><br>This is what the salon owner sees.<br>All commands via WhatsApp — no dashboard needed.<br><br>Tap below to see each command:<div class="msg-time">'+T()+'</div>';
+    var startBtn = document.createElement('div'); startBtn.className='wa-buttons';
+    var sb = document.createElement('button'); sb.className='wa-btn'; sb.textContent='▶️ Start Tour';
+    sb.onclick = function(){ addMsg('▶️ Start Tour','msg-out'); ownerNext(); };
+    startBtn.appendChild(sb); intro.appendChild(startBtn);
+    chat.appendChild(intro); chat.scrollTop = chat.scrollHeight;
+}
+
+// ---- INPUT ----
+function sendUserMessage(){
+    const t=chatInput.value.trim();if(!t)return;chatInput.value='';addMsg(t,'msg-out');
+    const l=t.toLowerCase();
+    if(['hi','hello','hey','hii','book','start','menu'].includes(l)){sel={};showStart();}
+    else if(l==='my bookings'||l==='bookings'){showMyBookings();}
+    else if(l==='cancel'||l==='0'){sel={};showStart();}
+    else{sel={};showStart();}
+}
+chatInput.addEventListener('keydown',e=>{if(e.key==='Enter')sendUserMessage();});
+
+// ---- DEMO SWITCH ----
+function switchDemo(mode, btnEl){
+    try {
+    document.querySelectorAll('.demo-tab').forEach(t=>t.classList.remove('active'));
+    if(btnEl) btnEl.classList.add('active');
+    chat.innerHTML=''; bookings=[]; sel={}; currentDemo=mode;
+    var inp = document.getElementById('chatInputWrap');
+    if(mode==='owner'){
+        cfg = DEMOS.owner;
+        document.getElementById('demoName').textContent='BookBot';
+        document.getElementById('demoAvatar').textContent='🤖';
+        inp.style.display='none';
+        setTimeout(function(){try{showOwnerMode();}catch(e){chat.innerHTML='<div style="color:red;padding:8px">Owner error: '+e.message+'</div>';}}, 100);
+    } else {
+        cfg = DEMOS[mode];
+        document.getElementById('demoName').textContent=cfg.name;
+        document.getElementById('demoAvatar').textContent=cfg.avatar;
+        inp.style.display='flex';
+        setTimeout(()=>{
+            var d = document.createElement('div'); d.className='msg msg-in';
+            d.innerHTML = '💬 Send a message to see how booking works!<div class="msg-time">'+T()+'</div>';
+            chat.appendChild(d);
+        }, 100);
+    }
+    } catch(e) { console.error('switchDemo error:', e); chat.innerHTML='<div style="color:red;padding:8px">Switch error: '+e.message+'</div>'; }
+}
+
+// Init — show prompt, don't auto-start flow
+cfg = DEMOS.multi;
+setTimeout(()=>{
+    const d = document.createElement('div'); d.className='msg msg-in';
+    d.innerHTML = `💬 Send a message to see how booking works!<div class="msg-time">${T()}</div>`;
+    chat.appendChild(d);
+}, 600);
+
+// ====== OWNER SIDEBAR DEMO (separate section) ======
+const OWNER_DEMOS = {
+    today:{cmd:'today',reply:`📅 <strong>Today</strong> (3 bookings):<br><br>✅ 10:00 AM — Haircut — Arun (7361)<br>&nbsp;&nbsp;ID: a3f2 | Staff: Ravi<br>✅ 11:30 AM — Facial — Preethi (9042)<br>&nbsp;&nbsp;ID: b7e4 | Staff: Meena<br>✅ 3:00 PM — Beard Trim — Kumar (5518)<br>&nbsp;&nbsp;ID: c9f1 | Staff: Ravi`},
+    stats:{cmd:'stats',reply:`📊 <strong>This week</strong> (12 May – 18 May):<br><br>Total bookings: 24<br>✅ Confirmed: 8<br>✔️ Completed: 14<br>❌ Cancelled: 1<br>👻 No-shows: 1 (4%)<br>👥 Unique customers: 18`},
+    block:{cmd:'block tomorrow 4-6pm',reply:`🚫 Blocked <strong>Tomorrow 4:00 PM - 6:00 PM</strong> for 2 staff.`},
+    cancel:{cmd:'cancel a3f2',reply:`❌ Booking <strong>a3f2</strong> cancelled.`},
+    pause:{cmd:'pause',reply:`⏸️ Bookings paused. Customers will be told you're unavailable.<br><br>Type <strong>resume</strong> to re-enable.`},
+};
+const ownerChat=document.getElementById('ownerChat');
+function showOwnerDemo(key, el){
+    document.querySelectorAll('.command-list li').forEach(li=>li.classList.remove('active'));
+    if(el) el.classList.add('active');
+    else { const first=document.querySelector('.command-list li'); if(first) first.classList.add('active'); }
+    const d=OWNER_DEMOS[key]; if(!d||!ownerChat) return;
+    ownerChat.innerHTML='';
+    const o=document.createElement('div');o.className='msg msg-out';o.innerHTML=d.cmd+`<div class="msg-time">${T()}</div>`;ownerChat.appendChild(o);
+    setTimeout(()=>{const i=document.createElement('div');i.className='msg msg-in';i.innerHTML=d.reply+`<div class="msg-time">${T()}</div>`;ownerChat.appendChild(i);},500);
+}
+setTimeout(()=>showOwnerDemo('today',null),500);
+
+// ====== SCROLL REVEAL ======
+const observer=new IntersectionObserver(e=>{e.forEach(x=>{if(x.isIntersecting)x.target.classList.add('visible');});},{threshold:0.1});
+document.querySelectorAll('.reveal').forEach(el=>observer.observe(el));
+</script>
+
+</body>
+</html>

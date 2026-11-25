@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BookBot Creator Portal</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:wght@700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
+:root{--ink:#1a1a2e;--ink-light:#4a4a6a;--ink-muted:#8888a4;--cream:#faf9f7;--white:#fff;--accent:#6c5ce7;--accent-dark:#5a4bd1;--accent-light:#a29bfe;--success:#2ecc71;--warning:#f39c12;--danger:#e74c3c;--border:#e8e6e1;--sidebar-w:260px;--code-bg:#1e1e2e;--code-fg:#cdd6f4}
+html{scroll-behavior:smooth}
+body{font-family:'Inter',-apple-system,sans-serif;color:var(--ink);line-height:1.7;background:var(--cream);-webkit-font-smoothing:antialiased}
+h1,h2,h3,h4{font-family:'Playfair Display',Georgia,serif;line-height:1.25}
+code,pre{font-family:'JetBrains Mono','SF Mono',monospace}
+
+/* LAYOUT */
+.docs-layout{display:flex;min-height:100vh}
+.sidebar{width:var(--sidebar-w);background:var(--white);border-right:1px solid var(--border);position:fixed;top:0;bottom:0;overflow-y:auto;padding:1.5rem 0;z-index:50}
+.sidebar .logo{font-family:'Playfair Display',serif;font-size:1.25rem;font-weight:800;color:var(--ink);text-decoration:none;padding:0 1.5rem;display:block;margin-bottom:1.5rem}
+.sidebar .logo span{color:var(--accent)}
+.sidebar .logo small{font-family:'Inter',sans-serif;font-size:.625rem;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-muted);display:block;margin-top:2px}
+.sidebar nav{padding:0 .75rem}
+.sidebar .group-title{font-family:'Inter',sans-serif;font-size:.6875rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-muted);padding:.75rem .75rem .375rem;margin-top:.75rem}
+.sidebar a{display:block;padding:.375rem .75rem;border-radius:6px;color:var(--ink-light);font-size:.8125rem;text-decoration:none;transition:all .15s}
+.sidebar a:hover{background:rgba(108,92,231,.06);color:var(--accent)}
+.sidebar a.active{background:rgba(108,92,231,.1);color:var(--accent);font-weight:600}
+.main{margin-left:var(--sidebar-w);flex:1;max-width:800px;padding:3rem 3rem 6rem}
+@media(max-width:900px){.sidebar{display:none}.main{margin-left:0;padding:2rem 1.5rem}.mobile-nav{display:block!important}}
+
+/* CONTENT */
+.main h1{font-size:2.25rem;margin-bottom:.5rem}
+.main h1+p{font-size:1.0625rem;color:var(--ink-light);margin-bottom:2.5rem}
+.main h2{font-size:1.5rem;margin-top:3rem;margin-bottom:1rem;padding-bottom:.5rem;border-bottom:1px solid var(--border)}
+.main h3{font-family:'Inter',sans-serif;font-size:1.0625rem;font-weight:700;margin-top:2rem;margin-bottom:.5rem}
+.main p{margin-bottom:1rem;color:var(--ink-light)}
+.main ul,.main ol{margin-bottom:1rem;padding-left:1.5rem;color:var(--ink-light)}
+.main li{margin-bottom:.375rem}
+.main strong{color:var(--ink);font-weight:600}
+.main a{color:var(--accent);text-decoration:none}
+.main a:hover{text-decoration:underline}
+
+/* CODE */
+pre{background:var(--code-bg);color:var(--code-fg);border-radius:10px;padding:1.25rem 1.5rem;overflow-x:auto;margin-bottom:1.5rem;font-size:.8125rem;line-height:1.65;position:relative}
+pre .label{position:absolute;top:.5rem;right:.75rem;font-size:.625rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.35);font-family:'Inter',sans-serif}
+pre .comment{color:#6c7086}
+pre .string{color:#a6e3a1}
+pre .keyword{color:#cba6f7}
+pre .number{color:#fab387}
+pre .key{color:#89b4fa}
+code:not(pre code){background:rgba(108,92,231,.08);color:var(--accent-dark);padding:.125rem .375rem;border-radius:4px;font-size:.8125rem}
+
+/* CALLOUTS */
+.callout{border-radius:8px;padding:1rem 1.25rem;margin-bottom:1.5rem;font-size:.875rem;line-height:1.6;display:flex;gap:.75rem}
+.callout-icon{flex-shrink:0;font-size:1.125rem;margin-top:1px}
+.callout-info{background:rgba(108,92,231,.06);border-left:3px solid var(--accent)}
+.callout-warning{background:rgba(243,156,18,.06);border-left:3px solid var(--warning)}
+.callout-success{background:rgba(46,204,113,.06);border-left:3px solid var(--success)}
+
+/* STEPS */
+.doc-steps{counter-reset:docstep;margin:1.5rem 0 2rem}
+.doc-step{display:flex;gap:1rem;margin-bottom:1.75rem;position:relative}
+.doc-step::before{counter-increment:docstep;content:counter(docstep);width:32px;height:32px;flex-shrink:0;background:var(--accent);color:white;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.8125rem}
+.doc-step:not(:last-child)::after{content:'';position:absolute;left:15px;top:40px;bottom:-12px;width:2px;background:var(--border)}
+.doc-step-content{flex:1}
+.doc-step-content h4{font-family:'Inter',sans-serif;font-weight:700;font-size:.9375rem;margin-bottom:.25rem}
+.doc-step-content p{font-size:.875rem;color:var(--ink-light);margin-bottom:.5rem}
+
+/* VISUAL STEP */
+.visual-step{background:var(--white);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin:.75rem 0 1rem}
+.visual-step-header{background:var(--cream);padding:.5rem 1rem;border-bottom:1px solid var(--border);font-size:.6875rem;font-weight:600;color:var(--ink-muted);letter-spacing:.06em;text-transform:uppercase;display:flex;align-items:center;gap:.5rem}
+.visual-step-header .dot{width:8px;height:8px;border-radius:50%}
+.visual-step-header .dot-r{background:#e74c3c}.visual-step-header .dot-y{background:#f39c12}.visual-step-header .dot-g{background:#2ecc71}
+.visual-step-body{padding:1rem}
+.visual-step-body img{width:100%;border-radius:4px}
+
+/* ENDPOINT */
+.endpoint{background:var(--white);border:1px solid var(--border);border-radius:10px;margin-bottom:1.25rem;overflow:hidden}
+.endpoint-header{display:flex;align-items:center;gap:.75rem;padding:.75rem 1rem;border-bottom:1px solid var(--border);cursor:pointer}
+.endpoint-method{font-family:'JetBrains Mono',monospace;font-size:.6875rem;font-weight:700;padding:.25rem .5rem;border-radius:4px;letter-spacing:.04em}
+.method-get{background:#dfe6e9;color:#2d3436}.method-post{background:#a29bfe;color:white}.method-put{background:#fab387;color:#1e1e2e}.method-delete{background:#e74c3c;color:white}
+.endpoint-path{font-family:'JetBrains Mono',monospace;font-size:.8125rem;color:var(--ink)}
+.endpoint-desc{font-size:.75rem;color:var(--ink-muted);margin-left:auto}
+.endpoint-body{padding:1rem;display:none;border-top:1px solid var(--border)}
+.endpoint-body.open{display:block}
+
+/* TABLE */
+table{width:100%;border-collapse:collapse;margin-bottom:1.5rem;font-size:.8125rem}
+th{text-align:left;font-weight:600;color:var(--ink);padding:.5rem .75rem;border-bottom:2px solid var(--border);font-size:.75rem;text-transform:uppercase;letter-spacing:.06em}
+td{padding:.5rem .75rem;border-bottom:1px solid var(--border);color:var(--ink-light)}
+td code{font-size:.75rem}
+
+/* BACK LINK */
+.back-link{display:inline-flex;align-items:center;gap:.375rem;font-size:.8125rem;color:var(--ink-muted);text-decoration:none;margin-bottom:2rem}
+.back-link:hover{color:var(--accent)}
+
+/* MOBILE NAV */
+.mobile-nav{display:none;position:fixed;bottom:1rem;right:1rem;z-index:100}
+.mobile-nav button{background:var(--accent);color:white;border:none;border-radius:50%;width:48px;height:48px;font-size:1.25rem;cursor:pointer;box-shadow:0 4px 16px rgba(108,92,231,.4)}
+</style>
+</head>
+<body>
+
+<!-- AUTH GATE -->
+<div id="auth-gate" style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:var(--cream)">
+  <div style="background:var(--white);border:1px solid var(--border);border-radius:14px;padding:2.5rem;max-width:360px;width:100%;margin:1rem;box-shadow:0 4px 24px rgba(0,0,0,.06)">
+    <div style="text-align:center;margin-bottom:1.5rem">
+      <div style="font-family:'Playfair Display',serif;font-size:1.5rem;font-weight:800;color:var(--ink)">Book<span style="color:var(--accent)">Bot</span></div>
+      <p style="font-size:.8125rem;color:var(--ink-muted);margin-top:.25rem">Creator Portal</p>
+    </div>
+    <label style="display:block;font-size:.8125rem;font-weight:600;color:var(--ink-light);margin-bottom:.375rem">Access Key</label>
+    <input id="doc-pass" type="password" placeholder="Enter admin key" autofocus
+      style="width:100%;border:1px solid var(--border);border-radius:8px;padding:.625rem .875rem;font-size:.875rem;outline:none;transition:border .2s"
+      onfocus="this.style.borderColor='var(--accent)'" onblur="this.style.borderColor='var(--border)'"
+      onkeydown="if(event.key==='Enter')docAuth()">
+    <button onclick="docAuth()"
+      style="width:100%;margin-top:.75rem;background:var(--accent);color:white;border:none;border-radius:8px;padding:.625rem;font-size:.875rem;font-weight:600;cursor:pointer;transition:background .2s"
+      onmouseover="this.style.background='var(--accent-dark)'" onmouseout="this.style.background='var(--accent)'">
+      Access Docs
+    </button>
+    <p id="doc-err" style="color:var(--danger);font-size:.75rem;text-align:center;margin-top:.5rem;display:none">Invalid access key</p>
+  </div>
+</div>
+
+<div class="docs-layout" id="docs-content" style="display:none">
+
+<!-- SIDEBAR -->
+<aside class="sidebar">
+  <a href="index.html" class="logo">Book<span>Bot</span> <small>Documentation</small></a>
+  <nav>
+    <div class="group-title">Getting Started</div>
+    <a href="#introduction" class="active">Introduction</a>
+    <a href="#quickstart">Quickstart</a>
+    <a href="#whatsapp-setup">WhatsApp Setup</a>
+    <a href="#first-booking">First Booking</a>
+
+    <div class="group-title">Dashboard</div>
+    <a href="#dashboard-login">Login & Auth</a>
+    <a href="#managing-services">Services</a>
+    <a href="#managing-staff">Staff</a>
+    <a href="#managing-bookings">Bookings</a>
+    <a href="#settings">Settings</a>
+
+    <div class="group-title">API Reference</div>
+    <a href="#api-reference">Overview</a>
+    <a href="#api-auth">Authentication</a>
+    <a href="#api-services">Services</a>
+    <a href="#api-staff">Staff</a>
+    <a href="#api-bookings">Bookings</a>
+    <a href="#api-customers">Customers</a>
+    <a href="#api-analytics">Analytics</a>
+
+    <div class="group-title">Owner Console</div>
+    <a href="#owner-commands">WhatsApp Commands</a>
+
+    <div class="group-title">Deployment</div>
+    <a href="#deploy-docker">Docker</a>
+    <a href="#env-vars">Environment Variables</a>
+  </nav>
+</aside>
+
+<!-- MAIN -->
+<div class="main">
+
+<a href="index.html" class="back-link">&larr; Back to BookBot</a>
+
+<h1>Documentation</h1>
+<p>Everything you need to set up, configure, and run BookBot for your salon business.</p>
+
+<!-- ============================================================ -->
+<h2 id="introduction">Introduction</h2>
+<p>BookBot is a <strong>WhatsApp-first booking platform</strong> for Indian service businesses. Customers book appointments by texting your WhatsApp number. You manage everything via WhatsApp commands or a web dashboard.</p>
+
+<div class="callout callout-info">
+  <div class="callout-icon">&#128161;</div>
+  <div><strong>No app downloads required.</strong> Your customers use WhatsApp &mdash; which they already have. You manage via WhatsApp + web dashboard.</div>
+</div>
+
+<h3>Architecture</h3>
+<ul>
+  <li><strong>Backend:</strong> Python / FastAPI / PostgreSQL / Redis</li>
+  <li><strong>Messaging:</strong> WhatsApp Cloud API (Meta)</li>
+  <li><strong>Payments:</strong> Razorpay</li>
+  <li><strong>Background:</strong> Celery (reminders, feedback)</li>
+  <li><strong>Dashboard:</strong> Single-page HTML app at <code>/dashboard/</code></li>
+</ul>
+
+<!-- ============================================================ -->
+<h2 id="quickstart">Quickstart</h2>
+<p>Get running locally in 5 minutes.</p>
+
+<div class="doc-steps">
+  <div class="doc-step"><div></div><div class="doc-step-content">
+    <h4>Clone & install</h4>
+<pre><span class="comment"># Clone</span>
+git clone https://github.com/Nikhil0307/saloon-bookbot.git
+<span class="keyword">cd</span> saloon-bookbot
+
+<span class="comment"># Create venv & install</span>
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e <span class="string">".[dev]"</span></pre>
+  </div></div>
+
+  <div class="doc-step"><div></div><div class="doc-step-content">
+    <h4>Start PostgreSQL & Redis</h4>
+<pre><span class="comment"># Using Docker</span>
+docker-compose up -d db redis
+
+<span class="comment"># Or use existing instances</span>
+<span class="comment"># Edit .env with your connection strings</span></pre>
+  </div></div>
+
+  <div class="doc-step"><div></div><div class="doc-step-content">
+    <h4>Configure environment</h4>
+<pre>cp .env.example .env
+<span class="comment"># Edit .env &mdash; defaults work for local dev</span></pre>
+  </div></div>
+
+  <div class="doc-step"><div></div><div class="doc-step-content">
+    <h4>Run migrations & start</h4>
+<pre>alembic upgrade head
+uvicorn app.main:app --reload --port <span class="number">8000</span></pre>
+  </div></div>
+
+  <div class="doc-step"><div></div><div class="doc-step-content">
+    <h4>Seed demo data & open dashboard</h4>
+<pre>curl -X POST http://localhost:<span class="number">8000</span>/dev/seed
+<span class="comment"># Open http://localhost:8000/dashboard/</span>
+<span class="comment"># Login: 9999900000 + any 6-digit OTP</span></pre>
+  </div></div>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="whatsapp-setup">WhatsApp Setup</h2>
+<p>Connect your WhatsApp Business number to BookBot.</p>
+
+<div class="doc-steps">
+  <div class="doc-step"><div></div><div class="doc-step-content">
+    <h4>Create Meta Business Account</h4>
+    <p>Go to <strong>business.facebook.com</strong> and create or use existing business account.</p>
+    <div class="visual-step">
+      <div class="visual-step-header"><span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span> Meta Business Suite</div>
+      <div class="visual-step-body" style="text-align:center;padding:2rem;color:var(--ink-muted);font-size:.875rem;">
+        <div style="background:var(--cream);border-radius:8px;padding:2rem;border:1px dashed var(--border);">
+          Navigate to <strong>business.facebook.com</strong> &rarr; Settings &rarr; Business Info<br>
+          Note your <strong>Business ID</strong> for later use
+        </div>
+      </div>
+    </div>
+  </div></div>
+
+  <div class="doc-step"><div></div><div class="doc-step-content">
+    <h4>Enable WhatsApp Cloud API</h4>
+    <p>In Meta Developer Portal, create an app and add WhatsApp product.</p>
+    <div class="visual-step">
+      <div class="visual-step-header"><span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span> developers.facebook.com</div>
+      <div class="visual-step-body" style="text-align:center;padding:2rem;color:var(--ink-muted);font-size:.875rem;">
+        <div style="background:var(--cream);border-radius:8px;padding:2rem;border:1px dashed var(--border);">
+          My Apps &rarr; Create App &rarr; Business &rarr; Add Product: <strong>WhatsApp</strong><br>
+          Copy your <strong>Phone Number ID</strong> and <strong>Access Token</strong>
+        </div>
+      </div>
+    </div>
+  </div></div>
+
+  <div class="doc-step"><div></div><div class="doc-step-content">
+    <h4>Configure Webhook</h4>
+    <p>Point Meta to your BookBot server.</p>
+<pre><span class="comment"># In Meta Dashboard &rarr; WhatsApp &rarr; Configuration</span>
+
+Callback URL:   <span class="string">https://yourdomain.com/webhooks/whatsapp</span>
+Verify Token:   <span class="string">your-verify-token</span>   <span class="comment"># matches META_WEBHOOK_VERIFY_TOKEN in .env</span>
+
+<span class="comment"># Subscribe to:</span>
+<span class="keyword">messages</span>        &check;</pre>
+  </div></div>
+
+  <div class="doc-step"><div></div><div class="doc-step-content">
+    <h4>Update .env</h4>
+<pre><span class="key">META_APP_ID</span>=<span class="string">your-app-id</span>
+<span class="key">META_APP_SECRET</span>=<span class="string">your-app-secret-or-access-token</span>
+<span class="key">META_WEBHOOK_VERIFY_TOKEN</span>=<span class="string">your-verify-token</span></pre>
+  </div></div>
+
+  <div class="doc-step"><div></div><div class="doc-step-content">
+    <h4>Link tenant to phone number</h4>
+    <p>In dashboard, the tenant's <code>waba_phone_number_id</code> must match your WhatsApp Phone Number ID.</p>
+<pre><span class="comment"># Via SQL or dashboard settings</span>
+UPDATE tenants
+SET waba_phone_number_id = <span class="string">'your-phone-number-id'</span>
+WHERE owner_phone = <span class="string">'+919999900000'</span>;</pre>
+  </div></div>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="first-booking">First Booking Test</h2>
+<p>Verify everything works with the dev simulator.</p>
+
+<pre><span class="label">BASH</span><span class="comment"># 1. Customer says hi</span>
+curl -X POST http://localhost:<span class="number">8000</span>/dev/simulate \
+  -H <span class="string">"Content-Type: application/json"</span> \
+  -d <span class="string">'{"from_phone":"+919876543210","body":"hi"}'</span>
+
+<span class="comment"># 2. Select first service</span>
+curl -X POST ... -d <span class="string">'{"from_phone":"+919876543210","body":"svc_0"}'</span>
+
+<span class="comment"># 3. Pick first date</span>
+curl -X POST ... -d <span class="string">'{"from_phone":"+919876543210","body":"date_0"}'</span>
+
+<span class="comment"># 4. Pick first slot</span>
+curl -X POST ... -d <span class="string">'{"from_phone":"+919876543210","body":"slot_0"}'</span>
+
+<span class="comment"># 5. Confirm</span>
+curl -X POST ... -d <span class="string">'{"from_phone":"+919876543210","body":"confirm_yes"}'</span></pre>
+
+<!-- ============================================================ -->
+<h2 id="dashboard-login">Dashboard Login</h2>
+<p>Access dashboard at <code>/dashboard/</code>. Login with owner phone number + OTP.</p>
+
+<div class="doc-steps">
+  <div class="doc-step"><div></div><div class="doc-step-content">
+    <h4>Enter phone number</h4>
+    <p>Type your 10-digit phone number (without +91). Dashboard adds prefix automatically.</p>
+    <div class="visual-step">
+      <div class="visual-step-header"><span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span> Dashboard Login</div>
+      <div class="visual-step-body" style="padding:1.5rem;text-align:center">
+        <div style="background:var(--cream);border-radius:8px;padding:1.5rem;max-width:300px;margin:0 auto;border:1px solid var(--border)">
+          <div style="font-weight:600;margin-bottom:.75rem;font-size:.875rem">Phone Number</div>
+          <div style="display:flex;gap:0;border:1px solid var(--border);border-radius:6px;overflow:hidden">
+            <span style="background:#f5f5f5;padding:.5rem .75rem;font-size:.875rem;color:var(--ink-muted);border-right:1px solid var(--border)">+91</span>
+            <span style="padding:.5rem .75rem;font-size:.875rem;color:var(--ink)">9999900000</span>
+          </div>
+          <div style="margin-top:.75rem;background:var(--accent);color:white;padding:.5rem;border-radius:6px;font-size:.8125rem;font-weight:600">Send OTP</div>
+        </div>
+      </div>
+    </div>
+  </div></div>
+
+  <div class="doc-step"><div></div><div class="doc-step-content">
+    <h4>Enter OTP</h4>
+    <p>In <strong>development mode</strong>, any 6-digit code works (e.g., <code>123456</code>).</p>
+    <div class="visual-step">
+      <div class="visual-step-header"><span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span> OTP Verification</div>
+      <div class="visual-step-body" style="padding:1.5rem;text-align:center">
+        <div style="background:var(--cream);border-radius:8px;padding:1.5rem;max-width:300px;margin:0 auto;border:1px solid var(--border)">
+          <div style="font-weight:600;margin-bottom:.75rem;font-size:.875rem">Enter OTP</div>
+          <div style="border:1px solid var(--border);border-radius:6px;padding:.5rem;text-align:center;font-size:1.25rem;letter-spacing:.5rem;font-family:monospace">123456</div>
+          <div style="margin-top:.75rem;background:var(--accent);color:white;padding:.5rem;border-radius:6px;font-size:.8125rem;font-weight:600">Verify & Sign In</div>
+        </div>
+      </div>
+    </div>
+  </div></div>
+
+  <div class="doc-step"><div></div><div class="doc-step-content">
+    <h4>Dashboard loaded</h4>
+    <p>You'll see the overview with today's bookings, revenue, and upcoming appointments.</p>
+  </div></div>
+</div>
+
+<div class="callout callout-warning">
+  <div class="callout-icon">&#9888;&#65039;</div>
+  <div><strong>Dev mode OTP:</strong> Any 6-digit code is accepted. In production, integrate with MSG91 or Twilio for real OTP verification.</div>
+</div>
+
+<!-- ============================================================ -->
+<h2 id="managing-services">Managing Services</h2>
+<p>Services can be standalone or organized in parent/child hierarchy.</p>
+
+<h3>Service Hierarchy</h3>
+<p>Create <strong>categories</strong> (parent services) to group related services:</p>
+
+<pre><span class="comment"># Parent category (not bookable)</span>
+{ <span class="key">"name"</span>: <span class="string">"Hair Services"</span>, <span class="key">"duration_minutes"</span>: <span class="number">0</span> }
+
+<span class="comment"># Child service (bookable)</span>
+{ <span class="key">"name"</span>: <span class="string">"Haircut"</span>, <span class="key">"duration_minutes"</span>: <span class="number">30</span>, <span class="key">"price_paise"</span>: <span class="number">50000</span>, <span class="key">"parent_service_id"</span>: <span class="string">"&lt;category-id&gt;"</span> }
+
+<span class="comment"># Standalone service (no parent, bookable)</span>
+{ <span class="key">"name"</span>: <span class="string">"Facial"</span>, <span class="key">"duration_minutes"</span>: <span class="number">60</span>, <span class="key">"price_paise"</span>: <span class="number">150000</span> }</pre>
+
+<h3>Service Fields</h3>
+<table>
+  <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+  <tr><td><code>name</code></td><td>string</td><td>Service name</td></tr>
+  <tr><td><code>duration_minutes</code></td><td>int</td><td>Duration (0 for categories)</td></tr>
+  <tr><td><code>price_paise</code></td><td>int</td><td>Price in paise (50000 = &#8377;500)</td></tr>
+  <tr><td><code>buffer_minutes</code></td><td>int</td><td>Gap after booking (default 0)</td></tr>
+  <tr><td><code>requires_deposit</code></td><td>bool</td><td>Require Razorpay deposit</td></tr>
+  <tr><td><code>deposit_amount_paise</code></td><td>int</td><td>Deposit amount in paise</td></tr>
+  <tr><td><code>parent_service_id</code></td><td>uuid</td><td>Parent category ID (optional)</td></tr>
+  <tr><td><code>sort_order</code></td><td>int</td><td>Display order</td></tr>
+</table>
+
+<!-- ============================================================ -->
+<h2 id="managing-staff">Managing Staff</h2>
+<p>Add team members and assign them to services.</p>
+<table>
+  <tr><th>Field</th><th>Type</th><th>Description</th></tr>
+  <tr><td><code>name</code></td><td>string</td><td>Staff name (required)</td></tr>
+  <tr><td><code>role</code></td><td>string</td><td>Role (stylist, therapist, etc)</td></tr>
+  <tr><td><code>skills</code></td><td>list</td><td>Service IDs this staff can do</td></tr>
+  <tr><td><code>working_hours</code></td><td>object</td><td>Per-day schedule (see below)</td></tr>
+</table>
+
+<h3>Working Hours Format</h3>
+<pre>{
+  <span class="key">"mon"</span>: [{ <span class="key">"open"</span>: <span class="string">"09:00"</span>, <span class="key">"close"</span>: <span class="string">"20:00"</span> }],
+  <span class="key">"tue"</span>: [{ <span class="key">"open"</span>: <span class="string">"09:00"</span>, <span class="key">"close"</span>: <span class="string">"20:00"</span> }],
+  <span class="key">"sat"</span>: [
+    { <span class="key">"open"</span>: <span class="string">"09:00"</span>, <span class="key">"close"</span>: <span class="string">"13:00"</span> },
+    { <span class="key">"open"</span>: <span class="string">"14:00"</span>, <span class="key">"close"</span>: <span class="string">"20:00"</span> }  <span class="comment">// split shift</span>
+  ]
+}</pre>
+
+<!-- ============================================================ -->
+<h2 id="managing-bookings">Managing Bookings</h2>
+<p>View, filter, and manage bookings from dashboard or API.</p>
+<h3>Booking Statuses</h3>
+<table>
+  <tr><th>Status</th><th>Meaning</th><th>Transitions</th></tr>
+  <tr><td><code>pending_deposit</code></td><td>Awaiting payment</td><td>&rarr; confirmed, cancelled</td></tr>
+  <tr><td><code>confirmed</code></td><td>Confirmed</td><td>&rarr; completed, cancelled, no_show</td></tr>
+  <tr><td><code>completed</code></td><td>Done</td><td>Terminal</td></tr>
+  <tr><td><code>cancelled</code></td><td>Cancelled</td><td>Terminal</td></tr>
+  <tr><td><code>no_show</code></td><td>Customer didn't show</td><td>Terminal</td></tr>
+</table>
+
+<!-- ============================================================ -->
+<h2 id="settings">Settings</h2>
+<p>All tenant-level settings, configurable via dashboard or API.</p>
+<table>
+  <tr><th>Setting</th><th>Default</th><th>Description</th></tr>
+  <tr><td><code>advance_booking_days</code></td><td>14</td><td>How far ahead customers can book</td></tr>
+  <tr><td><code>min_cancel_hours</code></td><td>2</td><td>Min hours before appointment to cancel</td></tr>
+  <tr><td><code>slot_increment_minutes</code></td><td>15</td><td>Slot granularity</td></tr>
+  <tr><td><code>max_bookings_per_customer</code></td><td>5</td><td>Active booking limit per customer</td></tr>
+  <tr><td><code>send_reminders</code></td><td>true</td><td>WhatsApp reminders</td></tr>
+  <tr><td><code>reminder_hours_before</code></td><td>24</td><td>Hours before to send reminder</td></tr>
+  <tr><td><code>send_feedback_request</code></td><td>true</td><td>Ask for rating after visit</td></tr>
+  <tr><td><code>feedback_delay_hours</code></td><td>2</td><td>Hours after service to ask feedback</td></tr>
+  <tr><td><code>google_review_url</code></td><td>null</td><td>Google review link for 4+ ratings</td></tr>
+  <tr><td><code>razorpay_enabled</code></td><td>false</td><td>Enable deposit payments</td></tr>
+</table>
+
+<!-- ============================================================ -->
+<h2 id="api-reference">API Reference</h2>
+<p>All endpoints under <code>/api</code>. Authenticated via JWT Bearer token.</p>
+
+<h2 id="api-auth">Authentication</h2>
+
+<div class="endpoint">
+  <div class="endpoint-header" onclick="this.nextElementSibling.classList.toggle('open')">
+    <span class="endpoint-method method-post">POST</span>
+    <span class="endpoint-path">/api/auth/login</span>
+    <span class="endpoint-desc">Get JWT token</span>
+  </div>
+  <div class="endpoint-body">
+    <h4>Request</h4>
+<pre>{ <span class="key">"phone"</span>: <span class="string">"+919999900000"</span>, <span class="key">"otp"</span>: <span class="string">"123456"</span> }</pre>
+    <h4>Response</h4>
+<pre>{
+  <span class="key">"access_token"</span>: <span class="string">"eyJhbG..."</span>,
+  <span class="key">"token_type"</span>: <span class="string">"bearer"</span>,
+  <span class="key">"tenant_id"</span>: <span class="string">"uuid"</span>,
+  <span class="key">"business_name"</span>: <span class="string">"Style Studio"</span>
+}</pre>
+    <h4>Usage</h4>
+<pre><span class="comment"># Include in all subsequent requests</span>
+Authorization: Bearer <span class="string">&lt;access_token&gt;</span></pre>
+  </div>
+</div>
+
+<h2 id="api-services">Services API</h2>
+
+<div class="endpoint">
+  <div class="endpoint-header" onclick="this.nextElementSibling.classList.toggle('open')"><span class="endpoint-method method-get">GET</span><span class="endpoint-path">/api/services</span><span class="endpoint-desc">List all (tree)</span></div>
+  <div class="endpoint-body"><p>Returns flat list with <code>children</code> array on parent items.</p></div>
+</div>
+<div class="endpoint">
+  <div class="endpoint-header" onclick="this.nextElementSibling.classList.toggle('open')"><span class="endpoint-method method-post">POST</span><span class="endpoint-path">/api/services</span><span class="endpoint-desc">Create service</span></div>
+  <div class="endpoint-body">
+<pre>{ <span class="key">"name"</span>: <span class="string">"Haircut"</span>, <span class="key">"duration_minutes"</span>: <span class="number">30</span>, <span class="key">"price_paise"</span>: <span class="number">50000</span> }</pre>
+  </div>
+</div>
+<div class="endpoint">
+  <div class="endpoint-header" onclick="this.nextElementSibling.classList.toggle('open')"><span class="endpoint-method method-put">PUT</span><span class="endpoint-path">/api/services/{id}</span><span class="endpoint-desc">Update service</span></div>
+  <div class="endpoint-body"><p>Send only fields to update. Supports <code>is_active</code>, <code>sort_order</code>, etc.</p></div>
+</div>
+<div class="endpoint">
+  <div class="endpoint-header" onclick="this.nextElementSibling.classList.toggle('open')"><span class="endpoint-method method-delete">DELETE</span><span class="endpoint-path">/api/services/{id}</span><span class="endpoint-desc">Soft delete</span></div>
+  <div class="endpoint-body"><p>Sets <code>is_active = false</code>.</p></div>
+</div>
+
+<h2 id="api-staff">Staff API</h2>
+<div class="endpoint"><div class="endpoint-header" onclick="this.nextElementSibling.classList.toggle('open')"><span class="endpoint-method method-get">GET</span><span class="endpoint-path">/api/staff</span><span class="endpoint-desc">List active staff</span></div><div class="endpoint-body"><p>Returns array of staff with skills, working_hours.</p></div></div>
+<div class="endpoint"><div class="endpoint-header" onclick="this.nextElementSibling.classList.toggle('open')"><span class="endpoint-method method-post">POST</span><span class="endpoint-path">/api/staff</span><span class="endpoint-desc">Add staff</span></div><div class="endpoint-body">
+<pre>{ <span class="key">"name"</span>: <span class="string">"Meena"</span>, <span class="key">"role"</span>: <span class="string">"stylist"</span>, <span class="key">"skills"</span>: [<span class="string">"svc-uuid-1"</span>, <span class="string">"svc-uuid-2"</span>] }</pre></div></div>
+<div class="endpoint"><div class="endpoint-header" onclick="this.nextElementSibling.classList.toggle('open')"><span class="endpoint-method method-put">PUT</span><span class="endpoint-path">/api/staff/{id}</span><span class="endpoint-desc">Update staff</span></div><div class="endpoint-body"><p>Partial update. Supports <code>is_active</code>, <code>working_hours</code>, <code>skills</code>.</p></div></div>
+<div class="endpoint"><div class="endpoint-header" onclick="this.nextElementSibling.classList.toggle('open')"><span class="endpoint-method method-delete">DELETE</span><span class="endpoint-path">/api/staff/{id}</span><span class="endpoint-desc">Soft delete</span></div><div class="endpoint-body"><p>Sets <code>is_active = false</code>.</p></div></div>
+
+<h2 id="api-bookings">Bookings API</h2>
+<div class="endpoint"><div class="endpoint-header" onclick="this.nextElementSibling.classList.toggle('open')"><span class="endpoint-method method-get">GET</span><span class="endpoint-path">/api/bookings</span><span class="endpoint-desc">List with filters</span></div><div class="endpoint-body"><p>Params: <code>from_date</code>, <code>to_date</code>, <code>status</code> (comma-separated), <code>staff_id</code>, <code>customer_id</code>, <code>page</code>, <code>per_page</code>.</p>
+<pre><span class="comment"># Example</span>
+GET /api/bookings?status=confirmed,pending_deposit&amp;from_date=<span class="number">2026-05-27</span>&amp;page=<span class="number">1</span>&amp;per_page=<span class="number">20</span></pre></div></div>
+<div class="endpoint"><div class="endpoint-header" onclick="this.nextElementSibling.classList.toggle('open')"><span class="endpoint-method method-get">GET</span><span class="endpoint-path">/api/bookings/{id}</span><span class="endpoint-desc">Booking detail</span></div><div class="endpoint-body"><p>Returns full booking with customer, service, staff names.</p></div></div>
+<div class="endpoint"><div class="endpoint-header" onclick="this.nextElementSibling.classList.toggle('open')"><span class="endpoint-method method-put">PUT</span><span class="endpoint-path">/api/bookings/{id}/status</span><span class="endpoint-desc">Change status</span></div><div class="endpoint-body">
+<pre>{ <span class="key">"status"</span>: <span class="string">"completed"</span> }  <span class="comment">// or cancelled, no_show</span></pre></div></div>
+
+<h2 id="api-customers">Customers API</h2>
+<div class="endpoint"><div class="endpoint-header" onclick="this.nextElementSibling.classList.toggle('open')"><span class="endpoint-method method-get">GET</span><span class="endpoint-path">/api/customers</span><span class="endpoint-desc">List + search</span></div><div class="endpoint-body"><p>Params: <code>search</code> (name/phone), <code>page</code>, <code>per_page</code>.</p></div></div>
+<div class="endpoint"><div class="endpoint-header" onclick="this.nextElementSibling.classList.toggle('open')"><span class="endpoint-method method-get">GET</span><span class="endpoint-path">/api/customers/{id}</span><span class="endpoint-desc">Detail + booking history</span></div><div class="endpoint-body"><p>Returns customer profile with recent bookings and feedback.</p></div></div>
+
+<h2 id="api-analytics">Analytics API</h2>
+<div class="endpoint"><div class="endpoint-header" onclick="this.nextElementSibling.classList.toggle('open')"><span class="endpoint-method method-get">GET</span><span class="endpoint-path">/api/analytics/overview</span><span class="endpoint-desc">Dashboard overview</span></div><div class="endpoint-body"><p>Today's bookings, week revenue, total customers, popular services, ratings.</p></div></div>
+<div class="endpoint"><div class="endpoint-header" onclick="this.nextElementSibling.classList.toggle('open')"><span class="endpoint-method method-get">GET</span><span class="endpoint-path">/api/analytics/bookings</span><span class="endpoint-desc">Booking trends</span></div><div class="endpoint-body"><p>Params: <code>from_date</code>, <code>to_date</code>. Returns daily counts by status.</p></div></div>
+<div class="endpoint"><div class="endpoint-header" onclick="this.nextElementSibling.classList.toggle('open')"><span class="endpoint-method method-get">GET</span><span class="endpoint-path">/api/analytics/revenue</span><span class="endpoint-desc">Revenue breakdown</span></div><div class="endpoint-body"><p>Revenue by service, by day. Params: <code>from_date</code>, <code>to_date</code>.</p></div></div>
+<div class="endpoint"><div class="endpoint-header" onclick="this.nextElementSibling.classList.toggle('open')"><span class="endpoint-method method-get">GET</span><span class="endpoint-path">/api/analytics/staff</span><span class="endpoint-desc">Staff utilization</span></div><div class="endpoint-body"><p>Bookings per staff, completion rate, revenue. Params: <code>from_date</code>, <code>to_date</code>.</p></div></div>
+
+<!-- ============================================================ -->
+<h2 id="owner-commands">Owner WhatsApp Commands</h2>
+<p>Text these to your WhatsApp number as the owner.</p>
+
+<table>
+  <tr><th>Command</th><th>What it does</th></tr>
+  <tr><td><code>today</code></td><td>Today's bookings with times, services, customer names</td></tr>
+  <tr><td><code>tomorrow</code></td><td>Tomorrow's bookings</td></tr>
+  <tr><td><code>stats</code></td><td>Weekly summary: confirmed, completed, cancelled, no-shows</td></tr>
+  <tr><td><code>free</code></td><td>Available slots for today</td></tr>
+  <tr><td><code>services</code></td><td>List all active services with prices</td></tr>
+  <tr><td><code>staff</code></td><td>List team members</td></tr>
+  <tr><td><code>add service Haircut 30 500</code></td><td>Add service (name, minutes, rupees)</td></tr>
+  <tr><td><code>remove service Haircut</code></td><td>Deactivate service</td></tr>
+  <tr><td><code>add staff Meena stylist</code></td><td>Add team member</td></tr>
+  <tr><td><code>set buffer 10</code></td><td>10-min gap between all bookings</td></tr>
+  <tr><td><code>cancel &lt;id&gt;</code></td><td>Cancel booking by ID prefix</td></tr>
+  <tr><td><code>block tomorrow 4-6pm</code></td><td>Block time slot</td></tr>
+  <tr><td><code>pause</code> / <code>resume</code></td><td>Disable/enable new bookings</td></tr>
+  <tr><td><code>help</code></td><td>Show all commands</td></tr>
+</table>
+
+<!-- ============================================================ -->
+<h2 id="deploy-docker">Docker Deployment</h2>
+<pre><span class="label">BASH</span><span class="comment"># Production</span>
+cp .env.prod.example .env.prod
+<span class="comment"># Edit .env.prod with real credentials</span>
+
+docker-compose -f docker-compose.prod.yml up -d</pre>
+
+<p>This starts: PostgreSQL, Redis, app (Gunicorn + Uvicorn workers), Celery worker, Celery beat, Nginx.</p>
+
+<!-- ============================================================ -->
+<h2 id="env-vars">Environment Variables</h2>
+<table>
+  <tr><th>Variable</th><th>Required</th><th>Description</th></tr>
+  <tr><td><code>DATABASE_URL</code></td><td>Yes</td><td>PostgreSQL connection string</td></tr>
+  <tr><td><code>REDIS_URL</code></td><td>Yes</td><td>Redis connection string</td></tr>
+  <tr><td><code>ENCRYPTION_KEY</code></td><td>Yes</td><td>Fernet key for token encryption</td></tr>
+  <tr><td><code>META_APP_ID</code></td><td>For WhatsApp</td><td>Meta App ID</td></tr>
+  <tr><td><code>META_APP_SECRET</code></td><td>For WhatsApp</td><td>Meta App Secret / Access Token</td></tr>
+  <tr><td><code>META_WEBHOOK_VERIFY_TOKEN</code></td><td>For WhatsApp</td><td>Webhook verification token</td></tr>
+  <tr><td><code>RAZORPAY_KEY_ID</code></td><td>For payments</td><td>Razorpay Key ID</td></tr>
+  <tr><td><code>RAZORPAY_KEY_SECRET</code></td><td>For payments</td><td>Razorpay Key Secret</td></tr>
+  <tr><td><code>JWT_SECRET</code></td><td>Recommended</td><td>Dashboard JWT signing key</td></tr>
+  <tr><td><code>SENTRY_DSN</code></td><td>No</td><td>Sentry error tracking</td></tr>
+  <tr><td><code>ENVIRONMENT</code></td><td>No</td><td>development / production</td></tr>
+</table>
+
+<div style="margin-top:4rem;padding-top:2rem;border-top:1px solid var(--border);text-align:center;color:var(--ink-muted);font-size:.8125rem">
+  <p>BookBot Documentation &middot; <a href="index.html">Home</a> &middot; <a href="/dashboard/">Dashboard</a></p>
+</div>
+
+</div>
+</div>
+
+<script>
+// Admin access key — change this to your secret
+const DOC_KEY_HASH = '5e884898da28047151d0e56f8dc6292773603d0d6aabbdd62a11ef721d1542d8'; // sha256 of "password"
+
+async function sha256(msg) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(msg));
+  return [...new Uint8Array(buf)].map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+async function docAuth() {
+  const input = document.getElementById('doc-pass').value;
+  const hash = await sha256(input);
+  if (hash === DOC_KEY_HASH || localStorage.getItem('doc_auth') === 'ok') {
+    localStorage.setItem('doc_auth', 'ok');
+    document.getElementById('auth-gate').style.display = 'none';
+    document.getElementById('docs-content').style.display = 'flex';
+  } else {
+    document.getElementById('doc-err').style.display = 'block';
+    document.getElementById('doc-pass').value = '';
+    document.getElementById('doc-pass').focus();
+  }
+}
+
+// Auto-login if previously authenticated
+if (localStorage.getItem('doc_auth') === 'ok') {
+  document.getElementById('auth-gate').style.display = 'none';
+  document.getElementById('docs-content').style.display = 'flex';
+}
+</script>
+</body>
+</html>
