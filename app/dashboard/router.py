@@ -667,6 +667,71 @@ async def complete_whatsapp_embedded_signup(
     }
 
 
+@router.post("/tenant/whatsapp/test")
+async def test_whatsapp_connection(
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Verify the tenant's connected WhatsApp Phone Number ID & token live against Meta Graph API."""
+    import httpx
+
+    from app.crypto import decrypt_secret
+
+    row = (
+        await db.execute(
+            text(
+                "SELECT waba_phone_number_id, waba_business_account_id, waba_access_token_encrypted "
+                "FROM tenants WHERE id = :tid LIMIT 1"
+            ),
+            {"tid": tenant_id},
+        )
+    ).first()
+    if not row or not row.waba_phone_number_id or not row.waba_access_token_encrypted:
+        raise HTTPException(status_code=400, detail="WhatsApp is not connected yet")
+
+    token = decrypt_secret(row.waba_access_token_encrypted)
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(
+                f"https://graph.facebook.com/v25.0/{row.waba_phone_number_id}",
+                params={"fields": "verified_name,display_phone_number,quality_rating"},
+                headers={"Authorization": f"Bearer {token}"},
+            )
+            if resp.status_code != 200:
+                detail = resp.json().get("error", {}).get("message", resp.text[:200]) if resp.headers.get("content-type", "").startswith("application/json") else resp.text[:200]
+                raise HTTPException(status_code=502, detail=f"Meta API check failed: {detail}")
+            data = resp.json()
+            return {
+                "connected": True,
+                "phone_number_id": row.waba_phone_number_id,
+                "waba_id": row.waba_business_account_id,
+                "display_phone_number": data.get("display_phone_number"),
+                "verified_name": data.get("verified_name"),
+                "quality_rating": data.get("quality_rating"),
+            }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Could not reach Meta Graph API: {exc}")
+
+
+@router.delete("/tenant/whatsapp")
+async def disconnect_whatsapp(
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Disconnect WhatsApp Business credentials cleanly for this tenant."""
+    await db.execute(
+        text(
+            "UPDATE tenants SET waba_phone_number_id = NULL, waba_business_account_id = NULL, "
+            "waba_access_token_encrypted = NULL, updated_at = :now WHERE id = :tid"
+        ),
+        {"tid": tenant_id, "now": datetime.now(timezone.utc)},
+    )
+    await db.commit()
+    return {"status": "disconnected"}
+
+
 @router.get("/tenant/settings")
 async def get_tenant_settings(
     tenant_id: uuid.UUID = Depends(get_current_tenant),

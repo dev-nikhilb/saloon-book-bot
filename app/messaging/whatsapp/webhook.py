@@ -46,8 +46,28 @@ async def process_webhook_payload(payload: dict) -> None:
             value = change.get("value", {})
             field = change.get("field")
 
+            if field == "account_update":
+                # Tech Provider Embedded Signup & WABA lifecycle events
+                logger.info(
+                    "whatsapp_account_update",
+                    waba_id=entry.get("id"),
+                    event_name=value.get("event"),
+                    phone_number=value.get("phone_number"),
+                )
+                continue
+
+            if field == "smb_message_echoes":
+                # Coexistence mode: owner replied directly from their native WhatsApp Business mobile app.
+                # Log echo cleanly as outbound without triggering bot auto-replies.
+                await _handle_smb_message_echoes(value)
+                continue
+
+            if field in ("history", "smb_app_state_sync"):
+                # Coexistence chat/contact sync events — acknowledge cleanly
+                logger.info("whatsapp_coexistence_sync", field=field, waba_id=entry.get("id"))
+                continue
+
             if field != "messages":
-                # Status updates, errors, etc — log and skip for now
                 logger.debug("webhook_field_ignored", field=field)
                 continue
 
@@ -266,6 +286,44 @@ async def _handle_customer_message(db, tenant, sender_phone: str, sender_name: s
         business_type=getattr(tenant, "business_type", None) or "salon",
         lang=cust_lang,
     )
+
+
+async def _handle_smb_message_echoes(value: dict) -> None:
+    """Log outbound messages sent directly by the business owner via the native WhatsApp Business app (Coexistence)."""
+    phone_number_id = value.get("metadata", {}).get("phone_number_id", "")
+    echoes = value.get("message_echoes") or value.get("messages") or []
+    if not phone_number_id or not echoes:
+        return
+
+    try:
+        async with async_session_factory() as db:
+            t_row = (
+                await db.execute(
+                    text("SELECT id FROM tenants WHERE waba_phone_number_id = :pid AND is_active = true LIMIT 1"),
+                    {"pid": phone_number_id},
+                )
+            ).first()
+            if not t_row:
+                return
+            for echo in echoes:
+                body = echo.get("text", {}).get("body", "") if echo.get("type") == "text" else f"[{echo.get('type', 'media')}]"
+                wamid = echo.get("id", "")
+                await db.execute(
+                    text(
+                        "INSERT INTO messages (id, tenant_id, direction, body, status, waba_message_id, created_at) "
+                        "VALUES (:id, :tid, 'outbound', :body, 'sent', :wamid, :now)"
+                    ),
+                    {
+                        "id": uuid.uuid4(),
+                        "tid": t_row.id,
+                        "body": f"[App] {body}"[:500],
+                        "wamid": wamid,
+                        "now": datetime.now(timezone.utc),
+                    },
+                )
+            await db.commit()
+    except Exception as exc:
+        logger.warning("whatsapp_smb_echo_log_failed", error=str(exc))
 
 
 async def _handle_status_update(status: dict) -> None:

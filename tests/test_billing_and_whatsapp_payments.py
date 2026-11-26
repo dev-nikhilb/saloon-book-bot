@@ -884,4 +884,124 @@ async def test_free_24h_thank_you_with_review_link_on_completed(db):
         assert "https://g.page/r/bloom-salon/review" in sent_text
 
 
+@pytest.mark.asyncio
+async def test_tech_provider_embedded_signup_coexistence_and_compliance_pages(db):
+    """End-to-end Tech Provider readiness: Embedded Signup, Test Connection, Disconnect, Coexistence echoes, Postgres state, and /privacy & /terms."""
+    from app.conversation.state import (
+        ConversationState,
+        ConversationStep,
+        _db_delete,
+        _db_get,
+        _db_set,
+    )
+    from app.messaging.whatsapp.webhook import process_webhook_payload
+
+    client = TestClient(app)
+
+    # 1. Meta Business Verification / App Review compliance pages return 200
+    assert client.get("/privacy").status_code == 200
+    assert "Privacy Policy" in client.get("/privacy").text
+    assert client.get("/terms").status_code == 200
+    assert "Terms of Service" in client.get("/terms").text
+
+    # 2. Serverless Postgres conversation state persists across cold starts
+    sk = f"conv:test:{uuid.uuid4().hex[:8]}"
+    st = ConversationState(step=ConversationStep.AWAITING_STAFF, tenant_id="t1", selected_service_name="Haircut")
+    await _db_set(sk, st.to_json())
+    loaded = await _db_get(sk)
+    assert loaded is not None
+    assert ConversationState.from_json(loaded).step == ConversationStep.AWAITING_STAFF
+    await _db_delete(sk)
+    assert await _db_get(sk) is None
+
+    # 3. Tech Provider Embedded Signup token exchange + auto-subscribe + Test + Disconnect
+    uid = str(uuid.uuid4())[:8]
+    su = client.post(
+        "/api/auth/signup",
+        json={
+            "business_name": "TechProv Studio",
+            "owner_name": "Nikhil",
+            "owner_phone": f"+9192{str(uuid.uuid4().int)[:8]}",
+            "business_type": "salon",
+            "slug": f"tp-{uid}",
+            "plan_tier": "solo",
+        },
+    )
+    assert su.status_code == 201
+    headers = {"Authorization": f"Bearer {su.json()['access_token']}"}
+    pid = f"142599{uid}"
+    waba_id = f"244349{uid}"
+
+    fake_get = MagicMock(status_code=200)
+    fake_get.json.return_value = {
+        "access_token": "EAA_perm_token_123",
+        "verified_name": "TechProv Studio",
+        "display_phone_number": "+91 99999 88888",
+        "quality_rating": "GREEN",
+    }
+    fake_post = MagicMock(status_code=200)
+    fake_post.json.return_value = {"success": True}
+
+    mock_http = AsyncMock()
+    mock_http.get.return_value = fake_get
+    mock_http.post.return_value = fake_post
+    mock_cm = AsyncMock()
+    mock_cm.__aenter__.return_value = mock_http
+
+    with (
+        patch.object(settings, "meta_app_id", "123456789"),
+        patch.object(settings, "meta_app_secret", "super-secret"),
+        patch.object(settings, "meta_config_id", "cfg_999"),
+        patch("httpx.AsyncClient", return_value=mock_cm),
+    ):
+        info = client.get("/api/tenant/whatsapp-setup-info", headers=headers).json()
+        assert info["embedded_signup_enabled"] is True
+        assert info["meta_config_id"] == "cfg_999"
+
+        emb = client.post(
+            "/api/tenant/whatsapp/embedded-signup",
+            headers=headers,
+            json={"code": "oauth_code_abc", "waba_id": waba_id, "phone_number_id": pid},
+        )
+        assert emb.status_code == 200
+        assert emb.json()["status"] == "connected"
+        assert emb.json()["webhook_subscribed"] is True
+
+        tst = client.post("/api/tenant/whatsapp/test", headers=headers)
+        assert tst.status_code == 200
+        assert tst.json()["verified_name"] == "TechProv Studio"
+
+    # 4. Coexistence webhooks (account_update, smb_message_echoes, history) process cleanly without loops
+    await process_webhook_payload({
+        "object": "whatsapp_business_account",
+        "entry": [{
+            "id": waba_id,
+            "changes": [
+                {"field": "account_update", "value": {"event": "PARTNER_ADDED", "phone_number": "+919999988888"}},
+                {"field": "history", "value": {"history": []}},
+                {
+                    "field": "smb_message_echoes",
+                    "value": {
+                        "metadata": {"phone_number_id": pid},
+                        "message_echoes": [{"id": f"wamid.echo.{uid}", "type": "text", "text": {"body": "See you at 5pm!"}}],
+                    },
+                },
+            ],
+        }],
+    })
+    echo_row = (
+        await db.execute(text("SELECT direction, body FROM messages WHERE waba_message_id = :wid"), {"wid": f"wamid.echo.{uid}"})
+    ).first()
+    assert echo_row is not None
+    assert echo_row.direction == "outbound"
+    assert "[App] See you at 5pm!" in echo_row.body
+
+    # 5. Disconnect revokes stored WhatsApp credentials cleanly
+    disc = client.delete("/api/tenant/whatsapp", headers=headers)
+    assert disc.status_code == 200
+    assert disc.json()["status"] == "disconnected"
+    assert client.post("/api/tenant/whatsapp/test", headers=headers).status_code == 400
+
+
+
 

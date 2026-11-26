@@ -104,7 +104,15 @@ async def health():
     return {"status": "ok", "environment": settings.environment}
 
 
-# Landing page + docs (MUST be last — catches all unmatched paths)
+# Landing page + docs + Meta compliance pages (MUST be last — catches all unmatched paths)
 _site_dir = Path(__file__).parent.parent / "site"
 if _site_dir.exists():
+    @app.get("/privacy")
+    async def privacy_policy_page():
+        return FileResponse(str(_site_dir / "privacy.html"))
+
+    @app.get("/terms")
+    async def terms_page():
+        return FileResponse(str(_site_dir / "terms.html"))
+
     app.mount("/", StaticFiles(directory=str(_site_dir), html=True), name="site")

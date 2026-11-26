@@ -2709,8 +2709,10 @@ async function renderSettings() {
             <span class="pill ${t.waba_phone_number_id ? 'pill-confirmed' : 'pill-no_show'}">${t.waba_phone_number_id ? 'Connected' : 'Not Connected'}</span>
           </div>
           <div style="display:flex;gap:0.45rem;flex-wrap:wrap">
-            <button type="button" class="btn btn-soft-blue btn-sm" onclick="toggleWaGuide()">📖 Step-by-Step Guide</button>
-            <button type="button" class="btn btn-secondary btn-sm" onclick="openSupportModal('WhatsApp WABA Setup Help')">💬 Request Free Setup Help</button>
+            ${t.waba_phone_number_id ? `<button type="button" class="btn btn-soft-green btn-sm" onclick="testWhatsAppConnection()">✓ Test Connection</button>` : ''}
+            ${t.waba_phone_number_id ? `<button type="button" class="btn btn-ghost btn-sm" style="color:var(--red-text)" onclick="disconnectWhatsApp()">Disconnect</button>` : ''}
+            <button type="button" class="btn btn-soft-blue btn-sm" onclick="toggleWaGuide()">📖 Setup Guide</button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="openSupportModal('WhatsApp WABA Setup Help')">💬 Free Setup Help</button>
           </div>
         </div>
 
@@ -2720,9 +2722,11 @@ async function renderSettings() {
             <div style="font-weight:700;font-size:0.9rem;color:var(--green-text)">⚡ 1-Click Official Meta Connect (Keep Using Your WhatsApp Business App!)</div>
             <div class="t-caption" style="color:var(--label);margin-top:2px">Connect your existing WhatsApp Business number in 60 seconds — zero webhooks or tokens to copy.</div>
           </div>
-          <button type="button" class="btn btn-primary btn-sm" onclick="launchMetaEmbeddedSignup()">Connect WhatsApp in 60s</button>
+          <button type="button" class="btn btn-primary btn-sm" onclick="launchMetaEmbeddedSignup()">${t.waba_phone_number_id ? 'Reconnect WhatsApp' : 'Connect WhatsApp in 60s'}</button>
         </div>
 
+        <!-- Manual Developer Credentials (auto-collapsed when 1-Click Meta Connect is active) -->
+        <div id="wa-manual-wrap">
         <!-- Copy-ready Webhook Credentials -->
         <div id="wa-webhook-box" style="display:grid;grid-template-columns:1fr 1fr;gap:0.65rem;padding:0.85rem;border-radius:12px;background:var(--surface-secondary);margin-bottom:0.95rem">
           <div style="min-width:0">
@@ -2768,6 +2772,10 @@ async function renderSettings() {
           </div>
           <div><button type="button" class="btn btn-primary btn-sm" onclick="saveWhatsApp()">Save WhatsApp Credentials</button></div>
         </form>
+        </div>
+        <div id="wa-manual-toggle" class="hidden" style="margin-top:0.5rem">
+          <button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('wa-manual-wrap')?.classList.toggle('hidden')">Advanced: Manual Developer Setup ▾</button>
+        </div>
       </div>
 
       <!-- Operating Hours & Branches -->
@@ -2859,9 +2867,32 @@ async function loadWaSetupInfo() {
     if (urlEl && info.webhook_url) urlEl.textContent = info.webhook_url;
     if (tokEl && info.verify_token) tokEl.textContent = info.verify_token;
     const embBox = document.getElementById('wa-embedded-box');
+    const manWrap = document.getElementById('wa-manual-wrap');
+    const manTog = document.getElementById('wa-manual-toggle');
     if (embBox && info.embedded_signup_enabled) {
       embBox.classList.remove('hidden');
+      if (manWrap) manWrap.classList.add('hidden');
+      if (manTog) manTog.classList.remove('hidden');
     }
+  } catch (e) {}
+}
+
+async function testWhatsAppConnection() {
+  try {
+    const res = await apiPost('/tenant/whatsapp/test', {});
+    const label = [res.verified_name, res.display_phone_number].filter(Boolean).join(' · ');
+    toast(`✅ Connected live to Meta${label ? ` (${label})` : ''}!`);
+  } catch (e) {}
+}
+
+async function disconnectWhatsApp() {
+  if (!confirm('Disconnect your WhatsApp Business number from BookBot?')) return;
+  try {
+    await apiDelete('/tenant/whatsapp');
+    state.tenant.waba_phone_number_id = null;
+    state.tenant.waba_business_account_id = null;
+    toast('WhatsApp disconnected', 'info');
+    renderSettings();
   } catch (e) {}
 }
 

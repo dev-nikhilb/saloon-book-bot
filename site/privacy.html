@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Privacy Policy — BookBot</title>
+<style>
+  body { font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif; color: #1D1D1F; background: #F5F5F7; margin: 0; padding: 2rem 1rem; line-height: 1.65; }
+  .wrap { max-width: 780px; margin: 0 auto; background: #fff; border-radius: 20px; padding: 2.5rem; box-shadow: 0 2px 14px rgba(0,0,0,0.06); }
+  h1 { font-size: 1.9rem; margin: 0 0 0.4rem; letter-spacing: -0.02em; }
+  .meta { color: #6E6E73; font-size: 0.88rem; margin-bottom: 1.8rem; }
+  h2 { font-size: 1.15rem; margin: 1.6rem 0 0.5rem; color: #1D1D1F; }
+  p, li { color: #3A3A3C; font-size: 0.95rem; }
+  a { color: #007AFF; text-decoration: none; }
+  a:hover { text-decoration: underline; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Privacy Policy</h1>
+  <div class="meta">Last updated: November 2026 &middot; BookBot Appointment Automation Platform</div>
+
+  <p>BookBot (&ldquo;we&rdquo;, &ldquo;our&rdquo;, &ldquo;us&rdquo;) provides WhatsApp-first appointment booking and customer scheduling software for salons, clinics, studios, and local service businesses. This Privacy Policy explains how we collect, use, store, and delete data processed through our web application and the official Meta WhatsApp Business Platform (Cloud API).</p>
+
+  <h2>1. Information We Collect</h2>
+  <ul>
+    <li><strong>Business Account Information:</strong> Business name, owner name, phone number, email address, services, staff profiles, operating hours, and WhatsApp Business Account (WABA) identifiers connected by the business owner.</li>
+    <li><strong>End-Customer Booking Data:</strong> Customer name, WhatsApp phone number, requested service, appointment time, optional visit notes, and booking status.</li>
+    <li><strong>WhatsApp Credentials &amp; Tokens:</strong> Meta Cloud API access tokens obtained via Meta Embedded Signup or manual configuration are encrypted at rest using Fernet (AES-128-CBC + HMAC-SHA256) and are never shared with third parties.</li>
+  </ul>
+
+  <h2>2. How We Use Information</h2>
+  <ul>
+    <li>To automate appointment discovery, availability lookup, booking confirmations, rescheduling, cancellations, and post-visit thank-you messages on behalf of the connected business.</li>
+    <li>To prevent double bookings and sync schedules with the business&rsquo;s dashboard and optional connected calendars.</li>
+    <li>To deliver authentication OTPs, subscription invoices, and customer support requested by the business owner.</li>
+  </ul>
+
+  <h2>3. Meta WhatsApp Business Platform &amp; Coexistence Compliance</h2>
+  <p>BookBot integrates with the official Meta WhatsApp Business Cloud API. Messages received from end-customers are processed solely to fulfill appointment booking workflows for the specific business the customer messaged. We do not sell, rent, or use WhatsApp message contents for advertising or third-party data brokering.</p>
+
+  <h2>4. Data Retention &amp; Security</h2>
+  <p>All data is transmitted over HTTPS/TLS and stored in encrypted PostgreSQL databases. Access tokens and credentials are encrypted at rest. Conversation step states expire automatically after 30 minutes of inactivity.</p>
+
+  <h2>5. Data Deletion Requests</h2>
+  <p>Business owners can disconnect their WhatsApp Business number at any time from <strong>Dashboard &rarr; Settings &rarr; WhatsApp Business Connection</strong>, which immediately revokes stored credentials on our servers. To request complete deletion of your business account or end-customer booking records, email <a href="mailto:support@bookbot.in">support@bookbot.in</a> (or submit a request via your Dashboard Support form). Deletion requests are fulfilled within 7 business days.</p>
+
+  <h2>6. Contact Us</h2>
+  <p>Questions about this Privacy Policy or Meta Platform data handling? Contact us at <a href="mailto:support@bookbot.in">support@bookbot.in</a> or visit <a href="/">BookBot Home</a>.</p>
+</div>
+</body>
+</html>
