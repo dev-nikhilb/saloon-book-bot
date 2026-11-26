@@ -1,17 +1,22 @@
-"""Per-customer conversation state stored in Redis.
+"""Per-customer conversation state stored in Redis (with automatic in-memory fallback).
 
 Each customer has a conversation state that tracks where they are in the booking flow.
-State expires after 30 minutes of inactivity.
+State expires after 30 minutes of inactivity. When Redis is unreachable (e.g. serverless
+without external REDIS_URL), falls back transparently to an in-memory TTL store.
 """
 from __future__ import annotations
 
 import json
+import os
+import time
 from dataclasses import asdict, dataclass
 from enum import Enum
 
+from app.config import settings
 from app.redis_client import get_redis
 
 STATE_TTL = 1800  # 30 minutes
+_mem_store: dict[str, tuple[str, float]] = {}
 
 
 class ConversationStep(str, Enum):
@@ -57,19 +62,63 @@ def _key(tenant_id: str, customer_phone: str) -> str:
     return f"conv:{tenant_id}:{customer_phone}"
 
 
+def _skip_redis() -> bool:
+    return bool(
+        os.environ.get("VERCEL")
+        and ("localhost" in settings.redis_url or "127.0.0.1" in settings.redis_url)
+    )
+
+
+def _mem_get(key: str) -> str | None:
+    item = _mem_store.get(key)
+    if not item:
+        return None
+    raw, exp = item
+    if time.monotonic() > exp:
+        _mem_store.pop(key, None)
+        return None
+    return raw
+
+
+def _mem_set(key: str, raw: str) -> None:
+    _mem_store[key] = (raw, time.monotonic() + STATE_TTL)
+
+
 async def get_state(tenant_id: str, customer_phone: str) -> ConversationState:
-    r = await get_redis()
-    data = await r.get(_key(tenant_id, customer_phone))
-    if data:
-        return ConversationState.from_json(data)
+    key = _key(tenant_id, customer_phone)
+    if not _skip_redis():
+        try:
+            r = await get_redis()
+            data = await r.get(key)
+            if data:
+                return ConversationState.from_json(data)
+            return ConversationState(tenant_id=tenant_id)
+        except Exception:
+            pass
+    raw = _mem_get(key)
+    if raw:
+        return ConversationState.from_json(raw)
     return ConversationState(tenant_id=tenant_id)
 
 
 async def set_state(tenant_id: str, customer_phone: str, state: ConversationState) -> None:
-    r = await get_redis()
-    await r.set(_key(tenant_id, customer_phone), state.to_json(), ex=STATE_TTL)
+    key = _key(tenant_id, customer_phone)
+    raw = state.to_json()
+    _mem_set(key, raw)
+    if not _skip_redis():
+        try:
+            r = await get_redis()
+            await r.set(key, raw, ex=STATE_TTL)
+        except Exception:
+            pass
 
 
 async def clear_state(tenant_id: str, customer_phone: str) -> None:
-    r = await get_redis()
-    await r.delete(_key(tenant_id, customer_phone))
+    key = _key(tenant_id, customer_phone)
+    _mem_store.pop(key, None)
+    if not _skip_redis():
+        try:
+            r = await get_redis()
+            await r.delete(key)
+        except Exception:
+            pass

@@ -616,3 +616,15 @@ async def test_trial_preserved_on_plan_switch_and_email_otp_signup(db):
     login_resp = client.post("/api/auth/login", json={"phone": email, "otp": dev_code})
     assert login_resp.status_code == 200
     assert login_resp.json()["business_name"] == "Trial Test Salon"
+
+    # 6. Authenticated production WhatsApp Simulator works in both customer & owner modes
+    sim_hi = client.post("/api/simulator/message", headers=headers, json={"mode": "customer", "body": "hi"})
+    assert sim_hi.status_code == 200
+    sim_data = sim_hi.json()
+    assert sim_data["type"] == "list"
+    assert sim_data["conv_state"] is not None
+    assert len(sim_data["sections"]) >= 1
+
+    sim_owner = client.post("/api/simulator/message", headers=headers, json={"mode": "owner", "body": "plan"})
+    assert sim_owner.status_code == 200
+    assert "Trial Test Salon" in sim_owner.json()["body"]

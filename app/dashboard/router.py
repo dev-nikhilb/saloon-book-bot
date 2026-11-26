@@ -1906,6 +1906,151 @@ async def update_billing_plan(
     )
 
 
+class SimulatorRequest(BaseModel):
+    mode: str = Field("customer", description="customer or owner")
+    body: str = Field(..., min_length=1, max_length=1000)
+    customer_phone: str = Field("+919876500111")
+    customer_name: str = Field("Test Customer")
+    conv_state: str | None = Field(None, description="Opaque JSON state for stateless serverless turns")
+
+
+@router.post("/simulator/message")
+async def dashboard_simulator_message(
+    req: SimulatorRequest,
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Authenticated live WhatsApp simulator for the logged-in owner's workspace.
+
+    Works in BOTH development and production (even without Redis) by persisting
+    real bookings/customers in Postgres and round-tripping conversation state.
+    """
+    t_row = (
+        await db.execute(
+            text(
+                "SELECT id, business_name, business_type, owner_phone, primary_language, timezone "
+                "FROM tenants WHERE id = :tid LIMIT 1"
+            ),
+            {"tid": tenant_id},
+        )
+    ).first()
+    if not t_row:
+        raise HTTPException(status_code=404, detail="Tenant not found")
+
+    tid_str = str(t_row.id)
+    tz_name = t_row.timezone or "Asia/Kolkata"
+    btype = t_row.business_type or "salon"
+    lang = t_row.primary_language or "en"
+
+    if req.mode == "owner":
+        from app.owner_console.handler import handle_owner_message
+
+        reply_text = await handle_owner_message(
+            db, tid_str, req.body, t_row.business_name, tz_name=tz_name, business_type=btype
+        )
+        return {
+            "mode": "owner",
+            "type": "text",
+            "body": reply_text,
+            "footer": "",
+            "buttons": [],
+            "button_text": "",
+            "sections": [],
+            "conv_state": None,
+        }
+
+    # Customer simulation mode
+    from app.conversation.menu_flow import handle_customer_message
+    from app.conversation.state import ConversationState, clear_state, get_state, set_state
+
+    phone = req.customer_phone.strip() or "+919876500111"
+
+    # Seed conversation state passed from client (keeps multi-turn flows working across Vercel lambdas)
+    if req.conv_state:
+        try:
+            restored = ConversationState.from_json(req.conv_state)
+            restored.tenant_id = tid_str
+            await set_state(tid_str, phone, restored)
+        except Exception:
+            await clear_state(tid_str, phone)
+    else:
+        await clear_state(tid_str, phone)
+
+    # Upsert simulated customer
+    cust_row = (
+        await db.execute(
+            text("SELECT id, name, preferred_language FROM customers WHERE tenant_id = :tid AND phone = :phone"),
+            {"tid": tenant_id, "phone": phone},
+        )
+    ).first()
+    if not cust_row:
+        cust_id = uuid.uuid4()
+        await db.execute(
+            text(
+                "INSERT INTO customers (id, tenant_id, phone, name, first_seen_at) "
+                "VALUES (:id, :tid, :phone, :name, :now)"
+            ),
+            {"id": cust_id, "tid": tenant_id, "phone": phone, "name": req.customer_name, "now": datetime.now(timezone.utc)},
+        )
+        await db.commit()
+        cust_name = req.customer_name
+        cust_lang = lang
+    else:
+        cust_id = cust_row.id
+        cust_name = cust_row.name or req.customer_name
+        cust_lang = cust_row.preferred_language or lang
+
+    reply = await handle_customer_message(
+        db=db,
+        tenant_id=tid_str,
+        customer_id=str(cust_id),
+        customer_phone=phone,
+        customer_name=cust_name,
+        body=req.body,
+        business_name=t_row.business_name,
+        tz_name=tz_name,
+        business_type=btype,
+        lang=cust_lang,
+    )
+
+    next_state = await get_state(tid_str, phone)
+    next_state_json = next_state.to_json() if next_state.step != "idle" else None
+
+    rtype = getattr(reply, "type", "text")
+    if rtype == "buttons":
+        return {
+            "mode": "customer",
+            "type": "buttons",
+            "body": reply.body,
+            "footer": getattr(reply, "footer", ""),
+            "buttons": reply.buttons,
+            "button_text": "",
+            "sections": [],
+            "conv_state": next_state_json,
+        }
+    if rtype == "list":
+        return {
+            "mode": "customer",
+            "type": "list",
+            "body": reply.body,
+            "footer": getattr(reply, "footer", ""),
+            "buttons": [],
+            "button_text": reply.button_text,
+            "sections": reply.sections,
+            "conv_state": next_state_json,
+        }
+    return {
+        "mode": "customer",
+        "type": "text",
+        "body": getattr(reply, "text", str(reply)),
+        "footer": "",
+        "buttons": [],
+        "button_text": "",
+        "sections": [],
+        "conv_state": next_state_json,
+    }
+
+
 class SupportRequestPayload(BaseModel):
     topic: str = Field(..., min_length=2, max_length=120)
     contact_phone: str | None = Field(None, max_length=30)

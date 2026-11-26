@@ -1192,6 +1192,7 @@ const state = {
   simMessages: [],
   simMode: 'customer',
   simPhone: '+919876500111',
+  simConvState: null,
 };
 
 const BUSINESS_LABELS = {
@@ -2351,21 +2352,31 @@ function renderSimulator() {
         </div>
 
         <div style="display:flex;flex-wrap:wrap;gap:0.4rem;margin-bottom:1rem" id="sim-quick-chips"></div>
-        <button class="btn btn-secondary btn-sm" onclick="state.simMessages=[];renderSimMessages()">Clear Conversation</button>
+        <button class="btn btn-secondary btn-sm" onclick="resetSimChat()">Restart Conversation</button>
       </div>
 
-      <div class="sim-phone">
-        <div class="sim-screen">
+      <div class="sim-phone" style="position:relative">
+        <div class="sim-screen" style="position:relative;overflow:hidden">
           <div class="sim-head">
             <div>
               <div style="font-weight:700;font-size:0.9rem">${escHtml(state.tenant?.business_name || 'BookBot')}</div>
-              <div style="font-size:0.7rem;opacity:0.8" id="sim-subtitle">${state.simMode === 'owner' ? 'Owner Console Mode' : 'Customer WhatsApp Mode'}</div>
+              <div style="font-size:0.7rem;opacity:0.8" id="sim-subtitle">${state.simMode === 'owner' ? 'Owner Console Mode' : 'Business Account · Live DB'}</div>
             </div>
             <span style="width:8px;height:8px;border-radius:50%;background:#25D366"></span>
           </div>
           <div class="sim-messages" id="sim-messages"></div>
+          <!-- In-phone Native WhatsApp List Sheet -->
+          <div id="sim-sheet-bg" onclick="if(event.target===this)closeSimSheet()" style="display:none;position:absolute;inset:0;background:rgba(0,0,0,0.48);z-index:20;align-items:flex-end">
+            <div style="width:100%;max-height:76%;background:var(--surface);color:var(--label);border-radius:18px 18px 0 0;display:flex;flex-direction:column;overflow:hidden">
+              <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 14px;border-bottom:0.5px solid var(--hairline)">
+                <strong id="sim-sheet-title" style="font-size:0.88rem">Choose an option</strong>
+                <button type="button" onclick="closeSimSheet()" style="border:none;background:none;font-size:1.1rem;cursor:pointer;color:var(--label-secondary)">&times;</button>
+              </div>
+              <div id="sim-sheet-body" style="overflow-y:auto;padding:4px 0 12px"></div>
+            </div>
+          </div>
           <div class="sim-input-bar">
-            <input id="sim-input" placeholder="Type a message (e.g. hi, 1, today)…" onkeydown="if(event.key==='Enter')sendSimMessage()">
+            <input id="sim-input" placeholder="Message (e.g. hi, today, plan)…" onkeydown="if(event.key==='Enter')sendSimMessage()">
             <button class="btn btn-primary btn-sm" style="border-radius:999px;background:#075E54" onclick="sendSimMessage()">Send</button>
           </div>
         </div>
@@ -2380,7 +2391,7 @@ function renderSimulator() {
       btn.classList.add('active');
       updateSegmentedThumb(seg, true);
       state.simMode = btn.dataset.mode;
-      document.getElementById('sim-subtitle').textContent = state.simMode === 'owner' ? 'Owner Console Mode' : 'Customer WhatsApp Mode';
+      document.getElementById('sim-subtitle').textContent = state.simMode === 'owner' ? 'Owner Console Mode' : 'Business Account · Live DB';
       renderSimQuickChips();
     };
   });
@@ -2388,10 +2399,53 @@ function renderSimulator() {
   renderSimMessages();
 }
 
+function resetSimChat() {
+  state.simMessages = [];
+  state.simConvState = null;
+  closeSimSheet();
+  renderSimMessages();
+}
+
+function closeSimSheet() {
+  const bg = document.getElementById('sim-sheet-bg');
+  if (bg) bg.style.display = 'none';
+}
+
+function openSimSheet(msgIdx) {
+  const m = state.simMessages[msgIdx];
+  if (!m || !m.sections) return;
+  document.getElementById('sim-sheet-title').textContent = m.button_text || 'Select an option';
+  const body = document.getElementById('sim-sheet-body');
+  body.innerHTML = '';
+  m.sections.forEach(sec => {
+    const h = document.createElement('div');
+    h.style.cssText = 'font-size:0.68rem;font-weight:700;text-transform:uppercase;letter-spacing:0.05em;color:#00A884;padding:10px 14px 4px';
+    h.textContent = sec.title || '';
+    body.appendChild(h);
+    (sec.rows || []).forEach(r => {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.style.cssText = 'width:100%;border:none;background:transparent;color:var(--label);padding:9px 14px;text-align:left;cursor:pointer;border-bottom:0.5px solid var(--hairline);display:flex;justify-content:space-between;align-items:center;gap:8px';
+      btn.innerHTML = `<div><div style="font-size:0.84rem;font-weight:600">${escHtml(r.title)}</div>${r.description ? `<div style="font-size:0.72rem;color:var(--label-secondary);margin-top:2px">${escHtml(r.description)}</div>` : ''}</div><span style="width:16px;height:16px;border-radius:50%;border:1.8px solid var(--label-tertiary);flex-shrink:0"></span>`;
+      btn.onclick = () => { closeSimSheet(); sendSimMessage(r.id, r.title); };
+      body.appendChild(btn);
+    });
+  });
+  document.getElementById('sim-sheet-bg').style.display = 'flex';
+}
+
+function formatSimWa(raw) {
+  return escHtml(raw || '')
+    .replace(/`([^`]+)`/g, '<code style="font-family:ui-monospace,monospace;font-size:0.75rem;padding:1px 4px;border-radius:4px;background:rgba(0,0,0,0.08)">$1</code>')
+    .replace(/\*([^*]+)\*/g, '<strong>$1</strong>')
+    .replace(/_([^_]+)_/g, '<em>$1</em>')
+    .replace(/\n/g, '<br>');
+}
+
 function renderSimQuickChips() {
   const chips = state.simMode === 'owner'
-    ? ['today', 'tomorrow', 'week', 'stats', 'free', 'services', 'staff', 'help']
-    : ['hi', '1', 'date_0', 'slot_0', 'confirm_yes', 'action_mybookings'];
+    ? ['today', 'tomorrow', 'week', 'pending', 'stats', 'plan', 'free', 'services', 'staff', 'help']
+    : ['hi', 'my bookings', 'cancel'];
   document.getElementById('sim-quick-chips').innerHTML = chips.map(c =>
     `<button class="btn btn-soft-blue btn-sm t-mono" onclick="sendSimMessage('${c}')">${escHtml(c)}</button>`
   ).join('');
@@ -2401,38 +2455,63 @@ function renderSimMessages() {
   const el = document.getElementById('sim-messages');
   if (!el) return;
   if (!state.simMessages.length) {
-    el.innerHTML = `<div style="text-align:center;margin:auto;color:#6E6E73;font-size:0.8rem">Tap a quick command on the left or send <strong>hi</strong> to begin.</div>`;
+    el.innerHTML = `<div style="text-align:center;margin:auto;color:#6E6E73;font-size:0.8rem;padding:1rem">Tap <strong>hi</strong> on the left to test a live booking against your real services &amp; calendar.</div>`;
     return;
   }
-  el.innerHTML = state.simMessages.map(m => `<div class="sim-bubble ${m.from === 'user' ? 'sim-user' : 'sim-bot'}">${escHtml(m.text)}</div>`).join('');
+  const lastBotIdx = state.simMessages.map((m, i) => m.from === 'bot' ? i : -1).filter(i => i >= 0).pop();
+  el.innerHTML = state.simMessages.map((m, idx) => {
+    if (m.from === 'user') {
+      return `<div class="sim-bubble sim-user">${formatSimWa(m.text)}</div>`;
+    }
+    const isLatest = idx === lastBotIdx;
+    const listBtn = (m.type === 'list' && m.sections?.length)
+      ? `<button type="button" onclick="openSimSheet(${idx})" style="width:100%;margin-top:8px;padding:7px;border:none;border-top:0.5px solid rgba(0,0,0,0.1);background:transparent;color:#00A884;font-weight:700;font-size:0.78rem;cursor:pointer">☰ ${escHtml(m.button_text || 'View Options')}</button>`
+      : '';
+    const replyBtns = (m.type === 'buttons' && m.buttons?.length)
+      ? `<div style="display:flex;flex-direction:column;gap:4px;margin-top:4px;max-width:85%">${m.buttons.map(b =>
+          `<button type="button" ${isLatest ? '' : 'disabled'} onclick="sendSimMessage('${escHtml(b.id)}','${escHtml(b.title)}')" style="border:none;border-radius:9px;padding:7px 10px;background:#fff;color:#00A884;font-weight:600;font-size:0.76rem;cursor:${isLatest ? 'pointer' : 'default'};opacity:${isLatest ? '1' : '0.5'};box-shadow:0 1px 2px rgba(0,0,0,0.08)">${escHtml(b.title)}</button>`
+        ).join('')}</div>`
+      : '';
+    return `<div style="display:flex;flex-direction:column;align-items:flex-start;max-width:88%">
+      <div class="sim-bubble sim-bot" style="max-width:100%">${formatSimWa(m.text)}${m.footer ? `<div style="font-size:0.68rem;color:#667781;margin-top:4px">${escHtml(m.footer)}</div>` : ''}${listBtn}</div>
+      ${replyBtns}
+    </div>`;
+  }).join('');
   el.scrollTop = el.scrollHeight;
 }
 
-async function sendSimMessage(presetText = null) {
+async function sendSimMessage(presetText = null, displayLabel = null) {
   const inp = document.getElementById('sim-input');
   const body = (presetText != null ? presetText : inp.value).trim();
   if (!body) return;
   if (presetText == null) inp.value = '';
 
-  state.simMessages.push({ from: 'user', text: body });
+  state.simMessages.push({ from: 'user', text: displayLabel || body });
   renderSimMessages();
 
   try {
-    const resp = await fetch('/dev/simulate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        from_phone: state.simMode === 'owner' ? state.tenant.owner_phone : state.simPhone,
-        body,
-        to_tenant_phone: state.tenant.owner_phone
-      })
+    const data = await apiPost('/simulator/message', {
+      mode: state.simMode,
+      body,
+      customer_phone: state.simPhone,
+      customer_name: 'Test Customer',
+      conv_state: state.simMode === 'customer' ? state.simConvState : null,
     });
-    if (!resp.ok) throw new Error('Simulator endpoint is only active in development mode');
-    const data = await resp.json();
-    state.simMessages.push({ from: 'bot', text: data.message });
+    if (state.simMode === 'customer') {
+      state.simConvState = data.conv_state || null;
+    }
+    state.simMessages.push({
+      from: 'bot',
+      type: data.type || 'text',
+      text: data.body || '',
+      footer: data.footer || '',
+      buttons: data.buttons || [],
+      button_text: data.button_text || '',
+      sections: data.sections || [],
+    });
     renderSimMessages();
   } catch (e) {
-    state.simMessages.push({ from: 'bot', text: `⚠️ ${e.message}` });
+    state.simMessages.push({ from: 'bot', type: 'text', text: `⚠️ ${e.message || 'Could not reach simulator'}` });
     renderSimMessages();
   }
 }
