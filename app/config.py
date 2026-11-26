@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     # Meta WhatsApp Business API
     meta_app_id: str = ""
     meta_app_secret: str = ""
+    meta_config_id: str = ""  # Tech Provider Embedded Signup configuration ID
     meta_access_token: str = ""  # optional fallback WABA token
     meta_webhook_verify_token: str = "changeme"
     webhook_async: bool = False  # set True in production to offload to Celery

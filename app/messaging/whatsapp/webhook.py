@@ -145,11 +145,29 @@ async def _handle_inbound_message(
                 body=body,
             )
 
-        # Log inbound message
+        # Log inbound message (including customer_id so free 24h service window is accurately tracked)
+        inbound_cust_id = None
+        if not is_owner:
+            cid_row = (
+                await db.execute(
+                    text("SELECT id FROM customers WHERE tenant_id = :tid AND phone = :phone LIMIT 1"),
+                    {"tid": tenant.id, "phone": sender_phone},
+                )
+            ).first()
+            if cid_row:
+                inbound_cust_id = cid_row.id
+
         await db.execute(
-            text("""INSERT INTO messages (id, tenant_id, direction, body, status, waba_message_id, created_at)
-                    VALUES (:id, :tid, 'inbound', :body, 'received', :wamid, :now)"""),
-            {"id": uuid.uuid4(), "tid": tenant.id, "body": body, "wamid": msg_id, "now": datetime.now(timezone.utc)},
+            text("""INSERT INTO messages (id, tenant_id, customer_id, direction, body, status, waba_message_id, created_at)
+                    VALUES (:id, :tid, :cid, 'inbound', :body, 'received', :wamid, :now)"""),
+            {
+                "id": uuid.uuid4(),
+                "tid": tenant.id,
+                "cid": inbound_cust_id,
+                "body": body,
+                "wamid": msg_id,
+                "now": datetime.now(timezone.utc),
+            },
         )
         await db.commit()
 

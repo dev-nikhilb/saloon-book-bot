@@ -21,6 +21,7 @@ class Tenant(Base):
     primary_language: Mapped[str] = mapped_column(Text, nullable=False, server_default="en")
     timezone: Mapped[str] = mapped_column(Text, nullable=False, server_default="Asia/Kolkata")
     waba_phone_number_id: Mapped[str | None] = mapped_column(Text)
+    waba_business_account_id: Mapped[str | None] = mapped_column(Text)
     waba_access_token_encrypted: Mapped[bytes | None] = mapped_column(LargeBinary)
     plan_tier: Mapped[str] = mapped_column(Text, nullable=False, server_default="solo")
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="true")
@@ -137,6 +138,7 @@ class TenantSettings(Base):
     # Display
     welcome_message: Mapped[str | None] = mapped_column(Text)
     booking_confirmed_message: Mapped[str | None] = mapped_column(Text)
+    thank_you_message: Mapped[str | None] = mapped_column(Text)
     google_review_url: Mapped[str | None] = mapped_column(Text)
 
     # Integrations & Deposit Collection

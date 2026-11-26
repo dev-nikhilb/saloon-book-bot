@@ -1765,9 +1765,20 @@ async function loadBookings() {
 
 async function changeBookingStatus(id, newStatus) {
   try {
-    if (newStatus === 'confirmed') await apiPost(`/bookings/${id}/confirm`, {});
-    else await apiPut(`/bookings/${id}/status`, { status: newStatus });
-    toast(`Marked as ${newStatus.replace('_', ' ')}`);
+    let res = null;
+    if (newStatus === 'confirmed') res = await apiPost(`/bookings/${id}/confirm`, {});
+    else res = await apiPut(`/bookings/${id}/status`, { status: newStatus });
+    if (newStatus === 'completed' && res) {
+      if (res.thank_you_sent) {
+        toast('Marked completed · Free WhatsApp Thank-You & Review link sent!');
+      } else if (res.thank_you_status === 'outside_24h_window') {
+        toast('Marked completed (outside 24h free WhatsApp window — skipped to avoid charges)', 'info');
+      } else {
+        toast('Marked as completed');
+      }
+    } else {
+      toast(`Marked as ${newStatus.replace('_', ' ')}`);
+    }
     loadBookings();
   } catch (e) {}
 }
@@ -2676,10 +2687,15 @@ async function renderSettings() {
               <label class="apple-switch"><input type="checkbox" name="send_reminders" ${s.send_reminders !== false ? 'checked' : ''}><span class="apple-switch-track"><span class="apple-switch-thumb"></span></span></label>
             </div>
             <div style="display:flex;justify-content:space-between;align-items:center">
-              <div><div class="t-body" style="font-weight:600">Feedback &amp; Google Reviews</div><div class="t-caption">Prompt after completed visit</div></div>
+              <div><div class="t-body" style="font-weight:600">Free Thank-You &amp; Google Reviews</div><div class="t-caption">Sent free on WhatsApp when marked Completed within 24h chat window</div></div>
               <label class="apple-switch"><input type="checkbox" name="send_feedback_request" ${s.send_feedback_request !== false ? 'checked' : ''}><span class="apple-switch-track"><span class="apple-switch-thumb"></span></span></label>
             </div>
-            <div><label class="field-label">Google Review Link</label><input name="google_review_url" class="input" placeholder="https://g.page/r/..." value="${escHtml(s.google_review_url || '')}"></div>
+            <div>
+              <label class="field-label">Custom Thank-You Message (₹0 within 24h window)</label>
+              <textarea name="thank_you_message" class="textarea" rows="3" placeholder="Thank you for visiting *{business_name}*, {customer_name}! 🙏 We hope you loved your *{service_name}*.">${escHtml(s.thank_you_message || '')}</textarea>
+              <div class="t-caption" style="margin-top:3px">Placeholders: <code>{customer_name}</code>, <code>{service_name}</code>, <code>{business_name}</code>. Never sends paid templates after 24h.</div>
+            </div>
+            <div><label class="field-label">Google Review Link (auto-appended to Thank-You)</label><input name="google_review_url" class="input" placeholder="https://g.page/r/..." value="${escHtml(s.google_review_url || '')}"></div>
             <div><button type="button" class="btn btn-primary btn-sm" onclick="saveNotif()">Save Automation</button></div>
           </form>
         </div>
@@ -2696,6 +2712,15 @@ async function renderSettings() {
             <button type="button" class="btn btn-soft-blue btn-sm" onclick="toggleWaGuide()">📖 Step-by-Step Guide</button>
             <button type="button" class="btn btn-secondary btn-sm" onclick="openSupportModal('WhatsApp WABA Setup Help')">💬 Request Free Setup Help</button>
           </div>
+        </div>
+
+        <!-- Official 1-Click Meta Embedded Signup (Tech Provider + WhatsApp Business App Coexistence) -->
+        <div id="wa-embedded-box" class="hidden" style="padding:1rem;border-radius:14px;background:var(--green-soft);border:0.5px solid rgba(52,199,89,0.28);margin-bottom:1rem;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.75rem">
+          <div>
+            <div style="font-weight:700;font-size:0.9rem;color:var(--green-text)">⚡ 1-Click Official Meta Connect (Keep Using Your WhatsApp Business App!)</div>
+            <div class="t-caption" style="color:var(--label);margin-top:2px">Connect your existing WhatsApp Business number in 60 seconds — zero webhooks or tokens to copy.</div>
+          </div>
+          <button type="button" class="btn btn-primary btn-sm" onclick="launchMetaEmbeddedSignup()">Connect WhatsApp in 60s</button>
         </div>
 
         <!-- Copy-ready Webhook Credentials -->
@@ -2736,9 +2761,10 @@ async function renderSettings() {
         </div>
 
         <form id="set-wa" style="display:flex;flex-direction:column;gap:0.85rem">
-          <div class="grid-2">
-            <div><label class="field-label">WABA Phone Number ID</label><input name="waba_phone_number_id" class="input t-mono" value="${escHtml(t.waba_phone_number_id || '')}" placeholder="100234567890123"></div>
-            <div><label class="field-label">Permanent Access Token (Fernet Encrypted)</label><input name="waba_access_token" type="password" class="input t-mono" placeholder="${t.waba_phone_number_id ? '••••••••••••' : 'Paste Meta System User token'}"></div>
+          <div class="grid-3">
+            <div><label class="field-label">WABA Phone Number ID *</label><input name="waba_phone_number_id" class="input t-mono" value="${escHtml(t.waba_phone_number_id || '')}" placeholder="1425931860614514"></div>
+            <div><label class="field-label">WhatsApp Business Account ID (Auto-Subscribes)</label><input name="waba_business_account_id" class="input t-mono" value="${escHtml(t.waba_business_account_id || '')}" placeholder="2443474279761159"></div>
+            <div><label class="field-label">Access Token (Fernet Encrypted)</label><input name="waba_access_token" type="password" class="input t-mono" placeholder="${t.waba_phone_number_id ? '••••••••••••' : 'Paste Meta token'}"></div>
           </div>
           <div><button type="button" class="btn btn-primary btn-sm" onclick="saveWhatsApp()">Save WhatsApp Credentials</button></div>
         </form>
@@ -2827,11 +2853,93 @@ async function renderSettings() {
 async function loadWaSetupInfo() {
   try {
     const info = await apiGet('/tenant/whatsapp-setup-info');
+    state.waSetupInfo = info;
     const urlEl = document.getElementById('wa-cb-url');
     const tokEl = document.getElementById('wa-verify-tok');
     if (urlEl && info.webhook_url) urlEl.textContent = info.webhook_url;
     if (tokEl && info.verify_token) tokEl.textContent = info.verify_token;
+    const embBox = document.getElementById('wa-embedded-box');
+    if (embBox && info.embedded_signup_enabled) {
+      embBox.classList.remove('hidden');
+    }
   } catch (e) {}
+}
+
+let _fbSdkLoaded = false;
+function loadFacebookSdk(appId) {
+  return new Promise((resolve, reject) => {
+    if (window.FB && _fbSdkLoaded) { resolve(); return; }
+    window.fbAsyncInit = function () {
+      window.FB.init({ appId, autoLogAppEvents: true, xfbml: false, version: 'v25.0' });
+      _fbSdkLoaded = true;
+      resolve();
+    };
+    const s = document.createElement('script');
+    s.src = 'https://connect.facebook.net/en_US/sdk.js';
+    s.async = true;
+    s.onerror = () => reject(new Error('Could not load Meta SDK'));
+    document.head.appendChild(s);
+  });
+}
+
+async function launchMetaEmbeddedSignup() {
+  const info = state.waSetupInfo || {};
+  if (!info.meta_app_id || !info.meta_config_id) {
+    toast('Meta Embedded Signup is not enabled yet', 'warning');
+    return;
+  }
+  try {
+    await loadFacebookSdk(info.meta_app_id);
+  } catch (e) {
+    toast(e.message, 'error');
+    return;
+  }
+
+  let capturedWabaId = '';
+  let capturedPhoneId = '';
+  const msgListener = (event) => {
+    if (event.origin !== 'https://www.facebook.com' && event.origin !== 'https://web.facebook.com') return;
+    try {
+      const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
+      if (data.type === 'WA_EMBEDDED_SIGNUP' && (data.event === 'FINISH' || data.event === 'FINISH_ONLY_WABA')) {
+        capturedWabaId = data.data?.waba_id || capturedWabaId;
+        capturedPhoneId = data.data?.phone_number_id || capturedPhoneId;
+      }
+    } catch (_) {}
+  };
+  window.addEventListener('message', msgListener);
+
+  window.FB.login((resp) => {
+    window.removeEventListener('message', msgListener);
+    const code = resp?.authResponse?.code;
+    if (!code) {
+      toast('WhatsApp connection cancelled', 'info');
+      return;
+    }
+    if (!capturedWabaId || !capturedPhoneId) {
+      toast('Received Meta auth code, please select a phone number inside the popup to finish.', 'warning');
+      return;
+    }
+    apiPost('/tenant/whatsapp/embedded-signup', {
+      code,
+      waba_id: capturedWabaId,
+      phone_number_id: capturedPhoneId,
+    }).then((res) => {
+      state.tenant.waba_phone_number_id = res.waba_phone_number_id;
+      state.tenant.waba_business_account_id = res.waba_business_account_id;
+      toast('🎉 WhatsApp connected & webhook auto-subscribed!');
+      renderSettings();
+    }).catch(() => {});
+  }, {
+    config_id: info.meta_config_id,
+    response_type: 'code',
+    override_default_response_type: true,
+    extras: {
+      setup: {},
+      featureType: 'whatsapp_business_app_onboarding',
+      sessionInfoVersion: '3',
+    },
+  });
 }
 
 function toggleWaGuide() {
@@ -2926,23 +3034,27 @@ async function saveNotif() {
     state.tenantSettings = await apiPut('/tenant/settings', {
       send_reminders: !!form.querySelector('[name=send_reminders]').checked,
       send_feedback_request: !!form.querySelector('[name=send_feedback_request]').checked,
-      google_review_url: fd.get('google_review_url') || null
+      thank_you_message: (fd.get('thank_you_message') || '').trim() || null,
+      google_review_url: (fd.get('google_review_url') || '').trim() || null
     });
-    toast('Automation saved');
+    toast('Automation & Thank-You message saved');
   } catch (e) {}
 }
 
 async function saveWhatsApp() {
   const fd = new FormData(document.getElementById('set-wa'));
   const pid = (fd.get('waba_phone_number_id') || '').trim();
+  const wabaId = (fd.get('waba_business_account_id') || '').trim();
   const tok = (fd.get('waba_access_token') || '').trim();
   if (!pid) { toast('Phone Number ID is required', 'error'); return; }
   const body = { waba_phone_number_id: pid };
+  if (wabaId) body.waba_business_account_id = wabaId;
   if (tok && !tok.startsWith('••')) body.waba_access_token = tok;
   try {
-    await apiPut('/tenant/whatsapp', body);
+    const res = await apiPut('/tenant/whatsapp', body);
     state.tenant.waba_phone_number_id = pid;
-    toast('WhatsApp credentials encrypted & saved');
+    if (wabaId) state.tenant.waba_business_account_id = wabaId;
+    toast(res.webhook_subscribed ? 'WhatsApp saved & WABA webhook auto-subscribed!' : 'WhatsApp credentials encrypted & saved');
     renderSettings();
   } catch (e) {}
 }

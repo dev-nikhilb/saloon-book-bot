@@ -6,7 +6,7 @@ Mounts under ``/api`` via ``APIRouter(prefix="/api")``.
 from __future__ import annotations
 
 import uuid
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 import structlog
@@ -97,6 +97,7 @@ class TenantSettingsUpdate(BaseModel):
     feedback_delay_hours: int | None = None
     welcome_message: str | None = None
     booking_confirmed_message: str | None = None
+    thank_you_message: str | None = None
     google_review_url: str | None = None
     google_calendar_enabled: bool | None = None
     razorpay_enabled: bool | None = None
@@ -523,7 +524,35 @@ async def update_tenant(
 
 class WhatsAppConfig(BaseModel):
     waba_phone_number_id: str
+    waba_business_account_id: str | None = None
     waba_access_token: str | None = None
+
+
+class EmbeddedSignupCompleteRequest(BaseModel):
+    code: str = Field(..., min_length=4)
+    waba_id: str = Field(..., min_length=5)
+    phone_number_id: str = Field(..., min_length=5)
+
+
+async def _subscribe_waba_webhook(waba_id: str, access_token: str) -> bool:
+    """Subscribe a WhatsApp Business Account (WABA) to our Meta App's webhook automatically."""
+    if not waba_id or not access_token:
+        return False
+    import httpx
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(
+                f"https://graph.facebook.com/v25.0/{waba_id.strip()}/subscribed_apps",
+                headers={"Authorization": f"Bearer {access_token.strip()}"},
+            )
+            if resp.status_code == 200 and resp.json().get("success"):
+                log.info("waba.webhook_subscribed", waba_id=waba_id)
+                return True
+            log.warning("waba.webhook_subscribe_failed", waba_id=waba_id, status=resp.status_code, body=resp.text[:200])
+    except Exception as exc:
+        log.warning("waba.webhook_subscribe_error", waba_id=waba_id, error=str(exc))
+    return False
 
 
 @router.put("/tenant/whatsapp")
@@ -532,27 +561,110 @@ async def update_whatsapp_config(
     tenant_id: uuid.UUID = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
-    """Update WhatsApp Business API credentials for tenant."""
+    """Update WhatsApp Business API credentials for tenant (auto-subscribes WABA webhook if WABA ID given)."""
     params: dict[str, Any] = {
         "tid": tenant_id,
-        "pid": body.waba_phone_number_id,
+        "pid": body.waba_phone_number_id.strip(),
+        "waba_id": body.waba_business_account_id.strip() if body.waba_business_account_id else None,
         "now": datetime.now(timezone.utc),
     }
     if body.waba_access_token:
         from app.crypto import encrypt_secret
 
-        params["token"] = encrypt_secret(body.waba_access_token)
+        params["token"] = encrypt_secret(body.waba_access_token.strip())
         await db.execute(
-            text("UPDATE tenants SET waba_phone_number_id = :pid, waba_access_token_encrypted = :token, updated_at = :now WHERE id = :tid"),
+            text(
+                "UPDATE tenants SET waba_phone_number_id = :pid, "
+                "waba_business_account_id = COALESCE(:waba_id, waba_business_account_id), "
+                "waba_access_token_encrypted = :token, updated_at = :now WHERE id = :tid"
+            ),
             params,
         )
     else:
         await db.execute(
-            text("UPDATE tenants SET waba_phone_number_id = :pid, updated_at = :now WHERE id = :tid"),
+            text(
+                "UPDATE tenants SET waba_phone_number_id = :pid, "
+                "waba_business_account_id = COALESCE(:waba_id, waba_business_account_id), "
+                "updated_at = :now WHERE id = :tid"
+            ),
             params,
         )
     await db.commit()
-    return {"status": "ok", "waba_phone_number_id": body.waba_phone_number_id}
+
+    webhook_subscribed = False
+    if params["waba_id"] and body.waba_access_token:
+        webhook_subscribed = await _subscribe_waba_webhook(params["waba_id"], body.waba_access_token)
+
+    return {
+        "status": "ok",
+        "waba_phone_number_id": params["pid"],
+        "waba_business_account_id": params["waba_id"],
+        "webhook_subscribed": webhook_subscribed,
+    }
+
+
+@router.post("/tenant/whatsapp/embedded-signup")
+async def complete_whatsapp_embedded_signup(
+    body: EmbeddedSignupCompleteRequest,
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Meta Tech Provider Embedded Signup (supports WhatsApp Business App Coexistence).
+
+    Exchanges the one-time Facebook Login authorization code for a Business Integration token,
+    auto-subscribes the tenant's WABA to our webhook, and saves Fernet-encrypted credentials.
+    """
+    import httpx
+
+    from app.config import settings as app_settings
+    from app.crypto import encrypt_secret
+
+    if not app_settings.meta_app_id or not app_settings.meta_app_secret:
+        raise HTTPException(
+            status_code=503,
+            detail="Meta Tech Provider Embedded Signup is not configured yet (META_APP_ID / META_APP_SECRET missing).",
+        )
+
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        tok_resp = await client.get(
+            "https://graph.facebook.com/v25.0/oauth/access_token",
+            params={
+                "client_id": app_settings.meta_app_id,
+                "client_secret": app_settings.meta_app_secret,
+                "code": body.code,
+            },
+        )
+        if tok_resp.status_code != 200:
+            err_msg = tok_resp.text[:250]
+            log.error("waba.embedded_signup_token_exchange_failed", status=tok_resp.status_code, body=err_msg)
+            raise HTTPException(status_code=502, detail=f"Meta token exchange failed: {err_msg}")
+        access_token = tok_resp.json().get("access_token")
+        if not access_token:
+            raise HTTPException(status_code=502, detail="Meta did not return an access_token")
+
+    webhook_subscribed = await _subscribe_waba_webhook(body.waba_id, access_token)
+
+    await db.execute(
+        text(
+            "UPDATE tenants SET waba_phone_number_id = :pid, "
+            "waba_business_account_id = :waba_id, "
+            "waba_access_token_encrypted = :token, updated_at = :now WHERE id = :tid"
+        ),
+        {
+            "tid": tenant_id,
+            "pid": body.phone_number_id.strip(),
+            "waba_id": body.waba_id.strip(),
+            "token": encrypt_secret(access_token),
+            "now": datetime.now(timezone.utc),
+        },
+    )
+    await db.commit()
+    return {
+        "status": "connected",
+        "waba_phone_number_id": body.phone_number_id.strip(),
+        "waba_business_account_id": body.waba_id.strip(),
+        "webhook_subscribed": webhook_subscribed,
+    }
 
 
 @router.get("/tenant/settings")
@@ -1260,6 +1372,92 @@ async def confirm_pending_booking(
     return _row_to_dict(row)
 
 
+async def _send_free_24h_thank_you(
+    db: AsyncSession, tenant_id: uuid.UUID, booking_id: uuid.UUID
+) -> dict[str, Any]:
+    """Send a customized Thank-You + Google Review WhatsApp message ONLY if within Meta's free 24-hour
+    customer-initiated service window (₹0 cost — never triggers paid templates).
+    """
+    row = (
+        await db.execute(
+            text("""
+                SELECT b.id AS booking_id, b.customer_id,
+                       c.name AS customer_name, c.phone AS customer_phone,
+                       s.name AS service_name,
+                       t.business_name, t.waba_phone_number_id,
+                       COALESCE(ts.send_feedback_request, true) AS send_feedback_request,
+                       ts.thank_you_message,
+                       ts.google_review_url
+                FROM bookings b
+                JOIN customers c ON c.id = b.customer_id
+                JOIN services s ON s.id = b.service_id
+                JOIN tenants t ON t.id = b.tenant_id
+                LEFT JOIN tenant_settings ts ON ts.tenant_id = t.id
+                WHERE b.id = :bid AND b.tenant_id = :tid
+                LIMIT 1
+            """),
+            {"bid": booking_id, "tid": tenant_id},
+        )
+    ).first()
+    if not row:
+        return {"sent": False, "status": "booking_not_found"}
+    if not row.send_feedback_request:
+        return {"sent": False, "status": "disabled"}
+    if not row.waba_phone_number_id or not row.customer_phone:
+        return {"sent": False, "status": "whatsapp_not_connected"}
+
+    # Verify customer initiated a WhatsApp message within the last 23h55m (Meta free 24h window)
+    win_row = (
+        await db.execute(
+            text("""
+                SELECT MAX(created_at) AS last_in
+                FROM messages
+                WHERE tenant_id = :tid AND customer_id = :cid AND direction = 'inbound'
+            """),
+            {"tid": tenant_id, "cid": row.customer_id},
+        )
+    ).first()
+    now = datetime.now(timezone.utc)
+    last_in = win_row.last_in if win_row else None
+    if not last_in or (now - last_in) > timedelta(hours=23, minutes=55):
+        return {"sent": False, "status": "outside_24h_window"}
+
+    cust_name = row.customer_name or "there"
+    svc_name = row.service_name or "appointment"
+    biz_name = row.business_name or "us"
+
+    template = (row.thank_you_message or "").strip()
+    if not template:
+        template = (
+            "Thank you for visiting *{business_name}*, {customer_name}! 🙏\n"
+            "We hope you loved your *{service_name}*."
+        )
+    msg_text = (
+        template.replace("{customer_name}", cust_name)
+        .replace("{service_name}", svc_name)
+        .replace("{business_name}", biz_name)
+    )
+    review_url = (row.google_review_url or "").strip()
+    if review_url and review_url not in msg_text:
+        msg_text += f"\n\n⭐ Loved your experience? Leave us a quick review:\n{review_url}"
+
+    try:
+        from app.messaging.whatsapp.client import send_text_message
+
+        send_res = await send_text_message(
+            phone_number_id=row.waba_phone_number_id,
+            to=row.customer_phone.lstrip("+"),
+            text_body=msg_text,
+            tenant_id=str(tenant_id),
+        )
+        if send_res is None:
+            return {"sent": False, "status": "whatsapp_send_failed", "preview": msg_text}
+        return {"sent": True, "status": "sent_free_24h", "preview": msg_text}
+    except Exception as exc:
+        log.warning("booking.thank_you_send_failed", booking_id=str(booking_id), error=str(exc))
+        return {"sent": False, "status": "whatsapp_send_failed", "preview": msg_text}
+
+
 @router.put("/bookings/{booking_id}/status")
 async def update_booking_status(
     booking_id: str,
@@ -1288,10 +1486,18 @@ async def update_booking_status(
 
     log.info("booking.status_updated", booking_id=str(bid), new_status=body.status)
 
+    thank_you_res = None
+    if body.status == "completed":
+        thank_you_res = await _send_free_24h_thank_you(db, tenant_id, bid)
+
     result = await db.execute(
         text("SELECT * FROM bookings WHERE id = :id"), {"id": bid}
     )
-    return _row_to_dict(result.first())
+    out = _row_to_dict(result.first())
+    if thank_you_res is not None:
+        out["thank_you_sent"] = bool(thank_you_res.get("sent"))
+        out["thank_you_status"] = thank_you_res.get("status")
+    return out
 
 
 # ---------------------------------------------------------------------------
@@ -2072,7 +2278,10 @@ async def get_whatsapp_setup_info(
 
     row = (
         await db.execute(
-            text("SELECT business_name, slug, waba_phone_number_id FROM tenants WHERE id = :tid"),
+            text(
+                "SELECT business_name, slug, waba_phone_number_id, waba_business_account_id "
+                "FROM tenants WHERE id = :tid"
+            ),
             {"tid": tenant_id},
         )
     ).first()
@@ -2083,6 +2292,10 @@ async def get_whatsapp_setup_info(
         "webhook_url": webhook_url,
         "verify_token": app_settings.meta_webhook_verify_token,
         "is_connected": bool(row and row.waba_phone_number_id),
+        "waba_business_account_id": row.waba_business_account_id if row else None,
+        "meta_app_id": app_settings.meta_app_id or None,
+        "meta_config_id": app_settings.meta_config_id or None,
+        "embedded_signup_enabled": bool(app_settings.meta_app_id and app_settings.meta_config_id),
         "business_name": row.business_name if row else "",
         "slug": row.slug if row else "",
     }

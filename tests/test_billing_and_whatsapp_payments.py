@@ -8,7 +8,7 @@ import hmac
 import json
 import uuid
 from datetime import datetime, timedelta, timezone
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
@@ -777,5 +777,111 @@ async def test_whatsapp_multi_staff_picker_and_full_day_slots(db):
     d6 = r6.json()
     assert d6["type"] == "buttons"
     assert "Priya" in d6["body"]
+
+
+@pytest.mark.asyncio
+async def test_free_24h_thank_you_with_review_link_on_completed(db):
+    """Marking a booking completed sends custom Thank-You + Google Review link ONLY within the free 24h window."""
+    client = TestClient(app)
+    uid = str(uuid.uuid4())[:8]
+    resp = client.post(
+        "/api/auth/signup",
+        json={
+            "business_name": "Bloom Salon",
+            "owner_name": "Nikhil",
+            "owner_phone": f"+9193{str(uuid.uuid4().int)[:8]}",
+            "business_type": "salon",
+            "slug": f"bloom-{uid}",
+            "plan_tier": "solo",
+        },
+    )
+    assert resp.status_code == 201
+    tid = resp.json()["tenant_id"]
+    headers = {"Authorization": f"Bearer {resp.json()['access_token']}"}
+
+    # Connect WhatsApp + customize thank-you message & Google review link
+    wa = client.put(
+        "/api/tenant/whatsapp",
+        headers=headers,
+        json={"waba_phone_number_id": f"14259{uid}", "waba_access_token": "test-tok"},
+    )
+    assert wa.status_code == 200
+    st = client.put(
+        "/api/tenant/settings",
+        headers=headers,
+        json={
+            "send_feedback_request": True,
+            "thank_you_message": "Thanks {customer_name} for your {service_name} at {business_name}!",
+            "google_review_url": "https://g.page/r/bloom-salon/review",
+        },
+    )
+    assert st.status_code == 200
+    assert st.json()["thank_you_message"] == "Thanks {customer_name} for your {service_name} at {business_name}!"
+
+    svc = client.post(
+        "/api/services",
+        headers=headers,
+        json={"name": "Haircut", "duration_minutes": 30, "price_paise": 50000},
+    ).json()
+
+    tomorrow = (datetime.now(timezone.utc) + timedelta(days=1)).replace(hour=10, minute=0, second=0, microsecond=0)
+    bk1 = client.post(
+        "/api/bookings",
+        headers=headers,
+        json={
+            "service_id": svc["id"],
+            "starts_at": tomorrow.isoformat(),
+            "customer_name": "Aarav",
+            "customer_phone": "+919876500111",
+        },
+    ).json()
+
+    # Case 1: Customer has NO inbound message within 24h -> must NOT send paid message
+    with patch("app.messaging.whatsapp.client.send_text_message", new_callable=AsyncMock) as mock_send:
+        c1 = client.put(f"/api/bookings/{bk1['id']}/status", headers=headers, json={"status": "completed"})
+        assert c1.status_code == 200
+        assert c1.json()["thank_you_sent"] is False
+        assert c1.json()["thank_you_status"] == "outside_24h_window"
+        mock_send.assert_not_called()
+
+    # Case 2: Customer sent an inbound WhatsApp message 2 hours ago (inside free 24h window!)
+    bk2 = client.post(
+        "/api/bookings",
+        headers=headers,
+        json={
+            "service_id": svc["id"],
+            "starts_at": (tomorrow + timedelta(hours=2)).isoformat(),
+            "customer_name": "Diya",
+            "customer_phone": "+919876500222",
+        },
+    ).json()
+    await db.execute(
+        text(
+            "INSERT INTO messages (id, tenant_id, customer_id, direction, body, status, created_at) "
+            "VALUES (:id, :tid, :cid, 'inbound', 'Hi', 'received', :now)"
+        ),
+        {
+            "id": uuid.uuid4(),
+            "tid": tid,
+            "cid": bk2["customer_id"],
+            "now": datetime.now(timezone.utc) - timedelta(hours=2),
+        },
+    )
+    await db.commit()
+
+    with patch(
+        "app.messaging.whatsapp.client.send_text_message",
+        new_callable=AsyncMock,
+        return_value={"messages": [{"id": "wamid.ok"}]},
+    ) as mock_send:
+        c2 = client.put(f"/api/bookings/{bk2['id']}/status", headers=headers, json={"status": "completed"})
+        assert c2.status_code == 200
+        assert c2.json()["thank_you_sent"] is True
+        assert c2.json()["thank_you_status"] == "sent_free_24h"
+        mock_send.assert_called_once()
+        sent_text = mock_send.call_args.kwargs["text_body"]
+        assert "Thanks Diya for your Haircut at Bloom Salon!" in sent_text
+        assert "https://g.page/r/bloom-salon/review" in sent_text
+
 
 
