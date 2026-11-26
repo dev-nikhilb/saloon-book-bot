@@ -14,7 +14,7 @@ def random_slug():
     return "test-" + "".join(random.choices(string.ascii_lowercase, k=8))
 
 
-def signup_and_get_token(client) -> tuple[str, str]:
+def signup_and_get_token(client, plan_tier: str = "solo") -> tuple[str, str]:
     """Returns (token, tenant_id)."""
     resp = client.post("/api/auth/signup", json={
         "business_name": "Test Salon",
@@ -22,6 +22,7 @@ def signup_and_get_token(client) -> tuple[str, str]:
         "owner_phone": random_phone(),
         "business_type": "salon",
         "slug": random_slug(),
+        "plan_tier": plan_tier,
     })
     data = resp.json()
     return data["access_token"], data["tenant_id"]
@@ -54,7 +55,7 @@ class TestServiceCRUD:
         assert "id" in data
 
     def test_create_service_with_all_fields(self, client):
-        token, _ = signup_and_get_token(client)
+        token, _ = signup_and_get_token(client, plan_tier="growth")
         resp = client.post("/api/services", headers=auth_headers(token), json={
             "name": "Hair Color",
             "description": "Full hair coloring service",

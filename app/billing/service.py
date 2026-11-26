@@ -334,11 +334,8 @@ async def get_subscription_state(db: AsyncSession, tenant_id: uuid.UUID) -> dict
         warning_level = "expired"
         warning_message = "Your subscription is inactive. Renew a plan to resume accepting new bookings."
 
-    # Active 14-day trial unlocks Growth-level limits/features
-    if effective_status == "trial" and access_mode == "full" and tier == "solo":
-        effective_plan = get_plan("growth")
-    else:
-        effective_plan = get_plan(tier)
+    # Enforce limits matching the tenant's selected plan tier (users can switch tiers freely during trial)
+    effective_plan = get_plan(tier)
 
     return {
         "subscription_id": str(sub.id),

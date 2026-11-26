@@ -2103,9 +2103,27 @@ async function renderStaff() {
 }
 
 async function loadStaff() {
+  const L = getLabels();
   try {
-    const list = await apiGet('/staff');
+    const [list, sub] = await Promise.all([
+      apiGet('/staff'),
+      state.subscription ? Promise.resolve(state.subscription) : apiGet('/billing/subscription').catch(() => null),
+    ]);
+    if (sub) state.subscription = sub;
     state.staff = list || [];
+    const maxStaff = state.subscription?.limits?.max_staff;
+    const staffLimitReached = maxStaff != null && state.staff.length >= maxStaff;
+    const curTier = (state.subscription?.plan_tier || 'solo').toUpperCase();
+    const recTier = state.subscription?.plan_tier === 'solo' ? 'growth' : 'pro';
+    if (staffLimitReached) {
+      setToolbarAction(`🔒 Upgrade to Add ${L.staff}`, () => openUpgradeModal(
+        `Add More ${L.staffs}`,
+        `Your ${curTier} plan includes up to ${maxStaff} ${maxStaff === 1 ? L.staff.toLowerCase() : L.staffs.toLowerCase()} (${state.staff.length}/${maxStaff} used). Upgrade to ${recTier === 'growth' ? 'Growth (up to 10)' : 'Pro (unlimited)'} to grow your team.`,
+        recTier
+      ));
+    } else {
+      setToolbarAction(`+ Add ${L.staff}`, () => openStaffForm());
+    }
     const el = document.getElementById('staff-grid');
     el.innerHTML = state.staff.map(s => `
       <div class="card" style="display:flex;flex-direction:column;justify-content:space-between;gap:1rem">
@@ -2523,7 +2541,22 @@ async function renderSettings() {
   const t = state.tenant || {};
   const s = state.tenantSettings || {};
   let branches = [];
-  try { branches = await apiGet('/branches'); } catch (e) {}
+  const [brRes, subRes] = await Promise.all([
+    apiGet('/branches').catch(() => []),
+    apiGet('/billing/subscription').catch(() => state.subscription || null),
+  ]);
+  branches = brRes || [];
+  if (subRes) {
+    state.subscription = subRes;
+    renderSubscriptionBanner();
+  }
+  const sub = state.subscription || {};
+  const curTier = (sub.plan_tier || t.plan_tier || 'solo').toLowerCase();
+  const maxBranches = sub?.limits?.max_branches;
+  const branchLimitReached = maxBranches != null && branches.length >= maxBranches;
+  const nextBranchTier = curTier === 'solo' ? 'growth' : 'pro';
+  const depositsEnabled = !!sub?.entitlements?.deposits_enabled;
+
   const primary = branches.find(b => b.is_primary) || branches[0];
   const opHours = primary?.operating_hours || {};
   const days = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'];
@@ -2665,9 +2698,14 @@ async function renderSettings() {
 
       <!-- Operating Hours & Branches -->
       <div class="card">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.9rem">
-          <h3 class="t-heading" style="margin:0">Operating Hours (${escHtml(primary?.name || 'Primary')})</h3>
-          <button class="btn btn-soft-blue btn-sm" onclick="openAddBranchModal()">+ Add Branch</button>
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.5rem;margin-bottom:0.9rem">
+          <div style="display:flex;align-items:center;gap:0.55rem;flex-wrap:wrap">
+            <h3 class="t-heading" style="margin:0">Operating Hours (${escHtml(primary?.name || 'Primary')})</h3>
+            <span class="pill" style="background:var(--surface-secondary);color:var(--label-secondary)">${branches.length} / ${maxBranches == null ? '∞' : maxBranches} ${maxBranches === 1 ? 'Branch' : 'Branches'}</span>
+          </div>
+          ${branchLimitReached
+            ? `<button type="button" class="btn btn-soft-blue btn-sm" onclick="openUpgradeModal('Upgrade to Add More Branches', 'Your ${escHtml(curTier.toUpperCase())} plan includes ${maxBranches} ${maxBranches === 1 ? 'branch' : 'branches'} (${branches.length}/${maxBranches} used). Upgrade to ${nextBranchTier === 'growth' ? 'Growth (up to 2 branches)' : 'Pro (unlimited branches)'} to manage multiple locations.', '${nextBranchTier}')">🔒 Upgrade Plan to Add Branch</button>`
+            : `<button type="button" class="btn btn-soft-blue btn-sm" onclick="openAddBranchModal()">+ Add Branch</button>`}
         </div>
         ${branches.length > 1 ? `<div style="display:flex;flex-wrap:wrap;gap:0.4rem;margin-bottom:1rem">${branches.map(b => `<span class="pill" style="background:var(--surface-secondary);color:var(--label)">${escHtml(b.name)}${b.is_primary ? ' (Primary)' : ` <button onclick="deleteBranch('${b.id}')" style="border:none;background:none;color:var(--red-text);cursor:pointer;margin-left:4px">✕</button>`}</span>`).join('')}</div>` : ''}
         <div style="display:flex;flex-direction:column;gap:0.5rem">
@@ -2690,7 +2728,7 @@ async function renderSettings() {
       <div class="card">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.85rem">
           <h3 class="t-heading" style="margin:0">WhatsApp Booking Deposits &amp; UPI</h3>
-          <span class="pill ${state.subscription?.entitlements?.deposits_enabled ? 'pill-confirmed' : 'pill-no_show'}">${state.subscription?.entitlements?.deposits_enabled ? 'Unlocked' : 'Growth+ Feature'}</span>
+          <span class="pill ${depositsEnabled ? 'pill-confirmed' : 'pill-no_show'}">${depositsEnabled ? 'Unlocked' : 'Growth+ Feature'}</span>
         </div>
         <form id="set-deposits" style="display:flex;flex-direction:column;gap:0.85rem">
           <div class="grid-3">
@@ -2713,12 +2751,16 @@ async function renderSettings() {
             </div>
           </div>
           <div class="t-caption">Razorpay Payment Links verify automatically via webhook. Direct UPI collects a 12-digit UTR from the customer on WhatsApp and lets you reply <code>confirm &lt;id&gt;</code> to approve in 1 tap.</div>
-          <div><button type="button" class="btn btn-primary btn-sm" onclick="saveDepositSettings()">Save Deposit Settings</button></div>
+          <div>
+            ${depositsEnabled
+              ? `<button type="button" class="btn btn-primary btn-sm" onclick="saveDepositSettings()">Save Deposit Settings</button>`
+              : `<button type="button" class="btn btn-soft-blue btn-sm" onclick="openUpgradeModal('Unlock WhatsApp Booking Deposits', 'Collect advance deposits via Razorpay Payment Links or 0%-fee Direct UPI on WhatsApp. Upgrade to the Growth or Pro plan to enable deposits.', 'growth')">🔒 Upgrade to Growth to Unlock Deposits</button>`}
+          </div>
         </form>
       </div>
 
       <!-- Billing & Subscription -->
-      <div class="card">
+      <div class="card" id="billing-card">
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.75rem;margin-bottom:0.85rem">
           <h3 class="t-heading" style="margin:0">Plan, Usage &amp; Invoices</h3>
           <div class="segmented" style="padding:2px">
@@ -2868,6 +2910,53 @@ async function saveHours(branchId) {
   try { await apiPut(`/branches/${branchId}`, { operating_hours }); toast('Operating hours saved'); } catch (e) {}
 }
 
+function openUpgradeModal(title, message, recommendedTier = 'growth') {
+  const sub = state.subscription || {};
+  const isTrial = sub.status === 'trial' && !sub.is_expired;
+  const recName = recommendedTier === 'pro' ? 'Pro' : 'Growth';
+  const recMeta = recommendedTier === 'pro'
+    ? '₹2,999/mo · Unlimited branches, unlimited team & bookings, custom subdomain'
+    : '₹1,499/mo · Up to 2 branches, 10 team members, 1,500 bookings/mo, WhatsApp Deposits & Google Calendar';
+  openModal(title || 'Upgrade Your Plan', `
+    <div style="display:flex;flex-direction:column;gap:0.9rem">
+      <div style="padding:0.9rem 1rem;border-radius:12px;background:var(--blue-soft);color:var(--label);font-size:0.86rem;line-height:1.5">
+        ${escHtml(message)}
+      </div>
+      <div style="padding:0.9rem 1rem;border-radius:12px;background:var(--surface-secondary);border:1px solid var(--hairline)">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.35rem">
+          <strong style="font-size:0.92rem">Recommended: ${recName} Plan</strong>
+          <span class="pill pill-confirmed">${isTrial ? 'Free during your 14-day trial' : 'Instant unlock'}</span>
+        </div>
+        <div class="t-caption">${recMeta}</div>
+        ${isTrial ? `<div class="t-caption" style="margin-top:0.4rem;color:var(--blue)">Switching plans now keeps your remaining ${sub.days_remaining || 14} free trial days — ₹0 due today.</div>` : ''}
+      </div>
+    </div>
+  `, `
+    <button type="button" class="btn btn-secondary" onclick="closeModal()">Not Now</button>
+    <button type="button" class="btn btn-soft-blue" onclick="goToBillingSection()">Compare All Plans</button>
+    <button type="button" class="btn btn-primary" onclick="closeModal();switchPlan('${recommendedTier}', false)">${isTrial ? `Switch Trial to ${recName}` : `Upgrade to ${recName}`}</button>
+  `);
+}
+
+function goToBillingSection() {
+  closeModal();
+  const scrollToBilling = () => {
+    const el = document.getElementById('billing-card');
+    if (el) {
+      el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el.style.transition = 'box-shadow 0.3s ease';
+      el.style.boxShadow = '0 0 0 2.5px var(--blue)';
+      setTimeout(() => { el.style.boxShadow = ''; }, 1800);
+    }
+  };
+  if (window.location.hash !== '#settings') {
+    window.location.hash = '#settings';
+    setTimeout(scrollToBilling, 350);
+  } else {
+    scrollToBilling();
+  }
+}
+
 function openAddBranchModal() {
   openModal('Add Location / Branch', `
     <form id="branch-form" style="display:flex;flex-direction:column;gap:0.85rem">
@@ -3009,6 +3098,16 @@ async function loadBillingBox() {
   } catch (e) {}
 }
 
+async function refreshAfterPlanChange() {
+  try {
+    state.subscription = await apiGet('/billing/subscription');
+    renderSubscriptionBanner();
+  } catch (e) {}
+  const view = (window.location.hash || '#overview').replace('#', '');
+  if (view === 'settings') renderSettings();
+  else if (view === 'staff') loadStaff();
+}
+
 async function switchPlan(tier, skipTrial = false) {
   const cycle = state.billingCycle || 'monthly';
   try {
@@ -3016,13 +3115,13 @@ async function switchPlan(tier, skipTrial = false) {
     if (res.checkout_mode === 'trial_plan_updated') {
       state.tenant.plan_tier = tier;
       toast(`Selected ${tier.toUpperCase()} (${cycle}) — your 14-day free trial is preserved!`);
-      loadBillingBox();
+      await refreshAfterPlanChange();
       return;
     }
     if (res.checkout_mode === 'sandbox_activated') {
       state.tenant.plan_tier = tier;
       toast(`Activated ${tier.toUpperCase()} (${cycle}) plan`);
-      loadBillingBox();
+      await refreshAfterPlanChange();
       return;
     }
     // Live Razorpay Checkout (Subscription or Order)
@@ -3042,7 +3141,7 @@ async function switchPlan(tier, skipTrial = false) {
         });
         state.tenant.plan_tier = tier;
         toast(`Payment verified — ${tier.toUpperCase()} plan active!`);
-        loadBillingBox();
+        await refreshAfterPlanChange();
       },
       theme: { color: '#007AFF' },
     };

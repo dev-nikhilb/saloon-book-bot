@@ -14,7 +14,7 @@ def random_slug():
     return "test-" + "".join(random.choices(string.ascii_lowercase, k=8))
 
 
-def signup_and_get_token(client) -> tuple[str, str]:
+def signup_and_get_token(client, plan_tier: str = "solo") -> tuple[str, str]:
     """Returns (token, tenant_id)."""
     resp = client.post("/api/auth/signup", json={
         "business_name": "Test Salon",
@@ -22,6 +22,7 @@ def signup_and_get_token(client) -> tuple[str, str]:
         "owner_phone": random_phone(),
         "business_type": "salon",
         "slug": random_slug(),
+        "plan_tier": plan_tier,
     })
     data = resp.json()
     return data["access_token"], data["tenant_id"]
@@ -177,7 +178,7 @@ class TestTenantSettings:
         assert data["google_review_url"] == "https://g.page/review/mysalon"
 
     def test_update_integrations(self, client):
-        token, _ = signup_and_get_token(client)
+        token, _ = signup_and_get_token(client, plan_tier="growth")
         headers = auth_headers(token)
 
         resp = client.put("/api/tenant/settings", headers=headers, json={

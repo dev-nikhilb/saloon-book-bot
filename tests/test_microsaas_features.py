@@ -28,13 +28,14 @@ def random_slug() -> str:
     return "biz-" + "".join(random.choices(string.ascii_lowercase, k=8))
 
 
-def signup(client, business_type: str = "clinic", business_name: str = "Mehta Clinic") -> dict:
+def signup(client, business_type: str = "clinic", business_name: str = "Mehta Clinic", plan_tier: str = "solo") -> dict:
     payload = {
         "business_name": business_name,
         "owner_name": "Dr. Mehta",
         "owner_phone": random_phone(),
         "business_type": business_type,
         "slug": random_slug(),
+        "plan_tier": plan_tier,
     }
     resp = client.post("/api/auth/signup", json=payload)
     assert resp.status_code == 201, resp.text
@@ -211,7 +212,7 @@ class TestMultiVerticalAndPublicBooking:
         assert invalid_resp.status_code == 409
 
     def test_manual_booking_and_pending_deposit_confirm(self, client):
-        salon = signup(client, "salon", "Glow Studio")
+        salon = signup(client, "salon", "Glow Studio", plan_tier="growth")
         svc = client.post("/api/services", headers=salon["headers"], json={
             "name": "Bridal Makeup",
             "duration_minutes": 90,

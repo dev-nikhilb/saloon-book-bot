@@ -628,3 +628,51 @@ async def test_trial_preserved_on_plan_switch_and_email_otp_signup(db):
     sim_owner = client.post("/api/simulator/message", headers=headers, json={"mode": "owner", "body": "plan"})
     assert sim_owner.status_code == 200
     assert "Trial Test Salon" in sim_owner.json()["body"]
+
+
+@pytest.mark.asyncio
+async def test_solo_trial_enforces_solo_branch_and_feature_limits(db):
+    """Solo trial accounts enforce Solo limits (1 branch, 2 staff, deposits locked) until upgraded to Growth/Pro."""
+    client = TestClient(app)
+    uid = str(uuid.uuid4())[:8]
+    resp = client.post(
+        "/api/auth/signup",
+        json={
+            "business_name": "Solo Limit Salon",
+            "owner_name": "Nikhil",
+            "owner_phone": f"+9195{str(uuid.uuid4().int)[:8]}",
+            "owner_email": f"solo-{uid}@glowtest.in",
+            "business_type": "salon",
+            "slug": f"solo-{uid}",
+            "plan_tier": "solo",
+            "billing_cycle": "monthly",
+        },
+    )
+    assert resp.status_code == 201
+    headers = {"Authorization": f"Bearer {resp.json()['access_token']}"}
+
+    sub = client.get("/api/billing/subscription", headers=headers).json()
+    assert sub["plan_tier"] == "solo"
+    assert sub["effective_tier"] == "solo"
+    assert sub["limits"]["max_branches"] == 1
+    assert sub["limits"]["max_staff"] == 2
+    assert sub["entitlements"]["deposits_enabled"] is False
+
+    # Adding a 2nd branch on Solo trial must fail with 402
+    br_fail = client.post("/api/branches", headers=headers, json={"name": "Indiranagar"})
+    assert br_fail.status_code == 402
+
+    # Switching trial to Growth preserves trial and unlocks adding a 2nd branch
+    sw = client.post(
+        "/api/billing/checkout",
+        headers=headers,
+        json={"plan_tier": "growth", "billing_cycle": "monthly", "skip_trial": False},
+    )
+    assert sw.status_code == 200
+    assert sw.json()["subscription"]["status"] == "trial"
+    assert sw.json()["subscription"]["limits"]["max_branches"] == 2
+    assert sw.json()["subscription"]["entitlements"]["deposits_enabled"] is True
+
+    br_ok = client.post("/api/branches", headers=headers, json={"name": "Indiranagar"})
+    assert br_ok.status_code == 201
+
