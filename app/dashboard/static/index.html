@@ -1745,7 +1745,10 @@ async function loadBookings() {
         </td>
         <td>${escHtml(b.service_name || '—')}</td>
         <td style="color:var(--label-secondary)">${escHtml(b.staff_name || '—')}</td>
-        <td>${statusPill(b.status)}</td>
+        <td>
+          ${statusPill(b.status)}
+          ${b.utr_reference ? `<div style="margin-top:4px"><span class="pill t-mono" style="font-size:0.7rem;background:${b.payment_status === 'submitted_utr' ? 'var(--amber-soft)' : 'var(--green-soft)'};color:${b.payment_status === 'submitted_utr' ? 'var(--amber-text)' : 'var(--green-text)'}">UTR: ${escHtml(b.utr_reference)}</span></div>` : ''}
+        </td>
         <td style="text-align:right" onclick="event.stopPropagation()">
           <div style="display:inline-flex;gap:0.3rem">
             ${b.status === 'pending_deposit' ? `
@@ -1805,6 +1808,21 @@ async function showBookingDetail(id) {
           <div><div class="t-micro">Price</div><div class="t-body t-num" style="font-weight:600;margin-top:2px">${formatCurrency(b.service_price_paise)}</div></div>
           <div><div class="t-micro">Reference</div><div class="t-body t-mono" style="font-weight:600;margin-top:2px">#${escHtml(String(b.id).slice(0,8).toUpperCase())}</div></div>
         </div>
+
+        ${(b.status === 'pending_deposit' || b.utr_reference || b.payment_status) ? `
+        <div class="card card-tight" style="background:${b.payment_status === 'submitted_utr' ? 'var(--amber-soft)' : 'var(--surface-secondary)'};box-shadow:none;display:flex;flex-direction:column;gap:0.45rem">
+          <div style="display:flex;justify-content:space-between;align-items:center">
+            <span class="t-micro">Deposit &amp; Payment Verification</span>
+            <span class="pill ${b.payment_status === 'captured' ? 'pill-confirmed' : 'pill-pending_deposit'}">${b.payment_status === 'submitted_utr' ? 'UTR Submitted — Verify' : (b.payment_status === 'captured' ? 'Verified & Paid' : 'Awaiting Payment')}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.5rem">
+            <div class="t-body">
+              ${b.deposit_amount_paise ? `<strong>${formatCurrency(b.deposit_amount_paise)}</strong> · ` : ''}
+              ${b.utr_reference ? `UTR / Txn Ref: <code id="insp-utr" class="t-mono" style="font-weight:700">${escHtml(b.utr_reference)}</code>` : '<span class="t-caption">No UTR submitted yet</span>'}
+            </div>
+            ${b.utr_reference ? `<button type="button" class="btn btn-secondary btn-sm" style="padding:2px 8px;font-size:0.72rem" onclick="copyTextById('insp-utr','UTR copied')">Copy UTR</button>` : ''}
+          </div>
+        </div>` : ''}
 
         <div>
           <label class="field-label">Reason for Visit / Request</label>

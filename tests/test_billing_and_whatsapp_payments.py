@@ -1003,5 +1003,110 @@ async def test_tech_provider_embedded_signup_coexistence_and_compliance_pages(db
     assert client.post("/api/tenant/whatsapp/test", headers=headers).status_code == 400
 
 
+@pytest.mark.asyncio
+async def test_deposit_upi_owner_alert_dashboard_utr_and_confirm_whatsapp(db):
+    """End-to-end UPI deposit flow: UPI ID shown, UTR alerts owner with 1-tap buttons, Dashboard shows UTR, Confirm notifies customer."""
+    from app.owner_console.parser import OwnerCommand, parse_command
+
+    client = TestClient(app)
+    uid = str(uuid.uuid4())[:8]
+    owner_phone = f"+9191{str(uuid.uuid4().int)[:8]}"
+    su = client.post(
+        "/api/auth/signup",
+        json={
+            "business_name": "Velvet Salon",
+            "owner_name": "Nikhil",
+            "owner_phone": owner_phone,
+            "business_type": "salon",
+            "slug": f"velvet-{uid}",
+            "plan_tier": "growth",
+        },
+    )
+    assert su.status_code == 201
+    headers = {"Authorization": f"Bearer {su.json()['access_token']}"}
+
+    # Connect WhatsApp + configure Direct UPI ID
+    client.put(
+        "/api/tenant/whatsapp",
+        headers=headers,
+        json={"waba_phone_number_id": f"142588{uid}", "waba_access_token": "tok"},
+    )
+    client.put(
+        "/api/tenant/settings",
+        headers=headers,
+        json={"deposit_mode": "upi_manual", "upi_id": "velvetsalon@okicici", "deposit_hold_minutes": 20},
+    )
+    client.post(
+        "/api/services",
+        headers=headers,
+        json={
+            "name": "Bridal Styling",
+            "duration_minutes": 60,
+            "price_paise": 300000,
+            "requires_deposit": True,
+            "deposit_amount_paise": 50000,
+        },
+    )
+
+    # 1. Customer books via simulator -> reservation reply MUST include UPI ID
+    r1 = client.post("/api/simulator/message", headers=headers, json={"mode": "customer", "body": "hi"}).json()
+    r2 = client.post("/api/simulator/message", headers=headers, json={"mode": "customer", "body": "svc_0", "conv_state": r1["conv_state"]}).json()
+    date_id = r2["sections"][0]["rows"][-1]["id"]
+    r3 = client.post("/api/simulator/message", headers=headers, json={"mode": "customer", "body": date_id, "conv_state": r2["conv_state"]}).json()
+    if r3["type"] == "buttons":
+        r3 = client.post("/api/simulator/message", headers=headers, json={"mode": "customer", "body": r3["buttons"][0]["id"], "conv_state": r3["conv_state"]}).json()
+    r4 = client.post("/api/simulator/message", headers=headers, json={"mode": "customer", "body": r3["sections"][0]["rows"][0]["id"], "conv_state": r3["conv_state"]}).json()
+    r5 = client.post("/api/simulator/message", headers=headers, json={"mode": "customer", "body": "confirm_yes", "conv_state": r4["conv_state"]}).json()
+    assert "velvetsalon@okicici" in r5["body"]
+    assert "upi://pay?" in r5["body"]
+
+    # Extract booking ref from verify_pay_<ref> button
+    verify_btn = next(b["id"] for b in r5["buttons"] if b["id"].startswith("verify_pay_"))
+    ref = verify_btn.replace("verify_pay_", "")
+
+    # 2. Customer taps "I've Paid (UTR)" and sends 12-digit UTR -> Owner MUST receive 1-tap WhatsApp alert!
+    r6 = client.post("/api/simulator/message", headers=headers, json={"mode": "customer", "body": verify_btn, "conv_state": r5["conv_state"]}).json()
+    with patch(
+        "app.messaging.whatsapp.client.send_reply_buttons",
+        new_callable=AsyncMock,
+        return_value={"messages": [{"id": "wamid.owner"}]},
+    ) as mock_owner_btn:
+        r7 = client.post("/api/simulator/message", headers=headers, json={"mode": "customer", "body": "837373838291", "conv_state": r6["conv_state"]}).json()
+        assert "837373838291" in r7["body"]
+        mock_owner_btn.assert_called_once()
+        assert mock_owner_btn.call_args.kwargs["to"] == owner_phone.lstrip("+")
+        assert "837373838291" in mock_owner_btn.call_args.kwargs["body"]
+        btn_ids = [b.id for b in mock_owner_btn.call_args.kwargs["buttons"]]
+        assert f"owner_confirm_{ref}" in btn_ids
+        assert f"owner_reject_{ref}" in btn_ids
+
+    # Verify 1-tap interactive button parser works
+    p_conf = parse_command(f"owner_confirm_{ref}")
+    assert p_conf.command == OwnerCommand.CONFIRM_PAYMENT and p_conf.booking_ref == ref
+    p_rej = parse_command(f"owner_reject_{ref}")
+    assert p_rej.command == OwnerCommand.REJECT_PAYMENT and p_rej.booking_ref == ref
+
+    # 3. Dashboard GET /bookings and GET /bookings/{id} MUST include utr_reference & payment_status
+    bk_list = client.get("/api/bookings", headers=headers).json()["items"]
+    assert len(bk_list) == 1
+    assert bk_list[0]["utr_reference"] == "837373838291"
+    assert bk_list[0]["payment_status"] == "submitted_utr"
+    bk_detail = client.get(f"/api/bookings/{bk_list[0]['id']}", headers=headers).json()
+    assert bk_detail["utr_reference"] == "837373838291"
+
+    # 4. Approving via Dashboard Confirm button MUST notify customer on WhatsApp!
+    with patch(
+        "app.messaging.whatsapp.client.send_text_message",
+        new_callable=AsyncMock,
+        return_value={"messages": [{"id": "wamid.cust"}]},
+    ) as mock_cust_msg:
+        conf = client.post(f"/api/bookings/{bk_list[0]['id']}/confirm", headers=headers)
+        assert conf.status_code == 200
+        assert conf.json()["status"] == "confirmed"
+        mock_cust_msg.assert_called_once()
+        assert "Payment Verified & Booking Confirmed" in mock_cust_msg.call_args.kwargs["text_body"]
+
+
+
 
 

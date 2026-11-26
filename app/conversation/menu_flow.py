@@ -1032,6 +1032,13 @@ async def _handle_confirmation(
                 f"Tap to pay: {pay_info['url']}\n"
                 f"_After paying, tap *I've Paid (UTR)* below or reply `paid <12-digit UTR>` (slot held {hold_mins} min)._"
             )
+        elif (tsettings.get("upi_id") or "").strip():
+            raw_upi = tsettings["upi_id"].strip()
+            pay_link_line = (
+                f"\n\n💳 *Pay {deposit_str} via UPI:*\n"
+                f"UPI ID: `{raw_upi}`\n"
+                f"_After paying, tap *I've Paid (UTR)* below or reply `paid <12-digit UTR>` (slot held {hold_mins} min)._"
+            )
 
         return ButtonResponse(
             body=(

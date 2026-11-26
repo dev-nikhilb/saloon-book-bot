@@ -1240,11 +1240,17 @@ async def list_bookings(
         text(
             f"SELECT b.*, "
             f"c.name AS customer_name, c.phone AS customer_phone, "
-            f"s.name AS service_name, st.name AS staff_name "
+            f"s.name AS service_name, st.name AS staff_name, "
+            f"p.payment_id, p.payment_status, p.payment_method, p.utr_reference, p.deposit_amount_paise "
             f"FROM bookings b "
             f"LEFT JOIN customers c ON c.id = b.customer_id "
             f"LEFT JOIN services s ON s.id = b.service_id "
             f"LEFT JOIN staff st ON st.id = b.staff_id "
+            f"LEFT JOIN LATERAL ("
+            f"  SELECT id AS payment_id, status AS payment_status, payment_method, "
+            f"         utr_reference, amount_paise AS deposit_amount_paise "
+            f"  FROM payments WHERE booking_id = b.id ORDER BY created_at DESC LIMIT 1"
+            f") p ON true "
             f"WHERE {where} "
             f"ORDER BY b.starts_at DESC "
             f"LIMIT :limit OFFSET :offset"
@@ -1268,11 +1274,17 @@ async def get_booking(
             "SELECT b.*, "
             "c.name AS customer_name, c.phone AS customer_phone, "
             "s.name AS service_name, s.duration_minutes, s.price_paise AS service_price_paise, "
-            "st.name AS staff_name "
+            "st.name AS staff_name, "
+            "p.payment_id, p.payment_status, p.payment_method, p.utr_reference, p.deposit_amount_paise "
             "FROM bookings b "
             "LEFT JOIN customers c ON c.id = b.customer_id "
             "LEFT JOIN services s ON s.id = b.service_id "
             "LEFT JOIN staff st ON st.id = b.staff_id "
+            "LEFT JOIN LATERAL ("
+            "  SELECT id AS payment_id, status AS payment_status, payment_method, "
+            "         utr_reference, amount_paise AS deposit_amount_paise "
+            "  FROM payments WHERE booking_id = b.id ORDER BY created_at DESC LIMIT 1"
+            ") p ON true "
             "WHERE b.id = :id AND b.tenant_id = :tid"
         ),
         {"id": bid, "tid": tenant_id},
@@ -1420,18 +1432,25 @@ async def confirm_pending_booking(
     tenant_id: uuid.UUID = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
-    """Manually confirm a pending_deposit booking (e.g. cash/UPI deposit received)."""
-    from app.bookings.models import BookingStatus
-    from app.bookings.repository import update_booking_status as repo_update_status
-    from app.exceptions import BookingNotFoundError, InvalidStateTransitionError
+    """Manually confirm a pending_deposit booking (marks deposit verified & notifies customer on WhatsApp)."""
+    from app.payments.router import confirm_manual_payment
 
     bid = _parse_uuid(booking_id, "booking_id")
-    try:
-        await repo_update_status(db, tenant_id, bid, BookingStatus.CONFIRMED)
-    except BookingNotFoundError:
+    cur = (
+        await db.execute(
+            text("SELECT id, status FROM bookings WHERE id = :id AND tenant_id = :tid LIMIT 1"),
+            {"id": bid, "tid": tenant_id},
+        )
+    ).first()
+    if not cur:
         raise HTTPException(status_code=404, detail="Booking not found")
-    except InvalidStateTransitionError as exc:
-        raise HTTPException(status_code=409, detail=str(exc))
+    if cur.status != "pending_deposit":
+        raise HTTPException(
+            status_code=409,
+            detail=f"Cannot confirm booking in '{cur.status}' state",
+        )
+
+    await confirm_manual_payment(db, str(tenant_id), str(bid), verified_by="owner_dashboard")
 
     row = (await db.execute(text("SELECT * FROM bookings WHERE id = :id"), {"id": bid})).first()
     return _row_to_dict(row)

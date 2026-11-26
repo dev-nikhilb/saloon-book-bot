@@ -98,10 +98,14 @@ class ManualActionRequest(BaseModel):
 # ---------------------------------------------------------------------------
 
 async def _send_whatsapp_notice(
-    db: AsyncSession, tenant_id, phone: str | None, message: str
-) -> None:
+    db: AsyncSession,
+    tenant_id,
+    phone: str | None,
+    message: str,
+    buttons: list[dict[str, str]] | None = None,
+) -> bool:
     if not phone:
-        return
+        return False
     try:
         t_row = (
             await db.execute(
@@ -110,13 +114,29 @@ async def _send_whatsapp_notice(
             )
         ).first()
         if not t_row or not t_row.waba_phone_number_id:
-            return
-        from app.messaging.whatsapp.client import WhatsAppClient
+            return False
+        from app.messaging.whatsapp.client import ReplyButton, send_reply_buttons, send_text_message
 
-        client = await WhatsAppClient.for_tenant(db, tenant_id, t_row.waba_phone_number_id)
-        await client.send_text(phone, message)
+        to_num = phone.lstrip("+")
+        if buttons:
+            res = await send_reply_buttons(
+                phone_number_id=t_row.waba_phone_number_id,
+                to=to_num,
+                body=message,
+                buttons=[ReplyButton(id=b["id"], title=b["title"][:20]) for b in buttons[:3]],
+                tenant_id=str(tenant_id),
+            )
+        else:
+            res = await send_text_message(
+                phone_number_id=t_row.waba_phone_number_id,
+                to=to_num,
+                text_body=message,
+                tenant_id=str(tenant_id),
+            )
+        return res is not None
     except Exception as exc:
         logger.warning("payment_whatsapp_notice_failed", error=str(exc))
+        return False
 
 
 # ---------------------------------------------------------------------------
@@ -309,7 +329,7 @@ async def create_whatsapp_deposit_payment(
                 }
 
     # Mode 2: Zero-MDR Direct UPI Deep Link + Customer UTR / Owner 1-Tap Verification
-    if upi_id and deposit_mode in ("upi_manual", "auto"):
+    if upi_id and deposit_mode != "disabled":
         upi_url = build_upi_deep_link(upi_id, business_name, amount_paise, ref)
         payment_id = uuid.uuid4()
         await db.execute(
@@ -432,9 +452,18 @@ async def submit_utr_reference(
         f"• Service: {row.service_name} ({amt_str})\n"
         f"• Booking ID: `{bid_short}`\n"
         f"• UPI UTR: `{cleaned_utr}`\n\n"
-        f"Reply *confirm {bid_short}* to approve or *reject {bid_short}* to release the slot."
+        f"Tap below to approve or reply *confirm {bid_short}* / *reject {bid_short}*."
     )
-    await _send_whatsapp_notice(db, tenant_id, row.owner_phone, owner_msg)
+    owner_notified = await _send_whatsapp_notice(
+        db,
+        tenant_id,
+        row.owner_phone,
+        owner_msg,
+        buttons=[
+            {"id": f"owner_confirm_{bid_short}", "title": "✅ Confirm Payment"},
+            {"id": f"owner_reject_{bid_short}", "title": "❌ Reject"},
+        ],
+    )
 
     return {
         "payment_id": str(payment_id),
@@ -442,6 +471,7 @@ async def submit_utr_reference(
         "booking_ref": bid_short,
         "utr_reference": cleaned_utr,
         "status": "submitted_utr",
+        "owner_notified": owner_notified,
     }
 
 
