@@ -136,7 +136,7 @@ async def get_public_business(slug: str, db: AsyncSession = Depends(get_db)) -> 
     svc_res = await db.execute(
         text(
             "SELECT id, parent_service_id, name, description, image_url, duration_minutes, "
-            "buffer_minutes, price_paise, requires_deposit, deposit_amount_paise, sort_order "
+            "buffer_minutes, slot_increment_minutes, price_paise, requires_deposit, deposit_amount_paise, sort_order "
             "FROM services WHERE tenant_id = :tid AND is_active = true ORDER BY sort_order, name"
         ),
         {"tid": tid},
@@ -153,6 +153,7 @@ async def get_public_business(slug: str, db: AsyncSession = Depends(get_db)) -> 
             "image_url": s.image_url,
             "duration_minutes": s.duration_minutes,
             "buffer_minutes": s.buffer_minutes,
+            "slot_increment_minutes": s.slot_increment_minutes,
             "price_paise": s.price_paise,
             "requires_deposit": s.requires_deposit,
             "deposit_amount_paise": s.deposit_amount_paise,

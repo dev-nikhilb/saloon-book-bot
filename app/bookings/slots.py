@@ -67,9 +67,12 @@ async def get_available_slots(
     3. For each staff: get working hours, subtract bookings, generate slots
     4. Return merged sorted list
     """
-    # 1. Get service (including buffer)
+    # 1. Get service (including buffer and optional per-service slot increment)
     svc_result = await db.execute(
-        text("SELECT duration_minutes, buffer_minutes FROM services WHERE id = :sid AND tenant_id = :tid AND is_active = true"),
+        text(
+            "SELECT duration_minutes, buffer_minutes, slot_increment_minutes "
+            "FROM services WHERE id = :sid AND tenant_id = :tid AND is_active = true"
+        ),
         {"sid": service_id, "tid": tenant_id},
     )
     svc = svc_result.first()
@@ -79,8 +82,11 @@ async def get_available_slots(
     duration = timedelta(minutes=svc.duration_minutes)
     buffer = timedelta(minutes=svc.buffer_minutes or 0)
 
-    # Determine slot increment (tenant setting fallback to SLOT_INCREMENT)
-    if slot_increment is None:
+    # Determine slot increment: per-service override -> explicit/tenant setting -> SLOT_INCREMENT
+    svc_inc = getattr(svc, "slot_increment_minutes", None)
+    if svc_inc and int(svc_inc) > 0:
+        slot_increment = int(svc_inc)
+    elif slot_increment is None:
         ts_res = await db.execute(
             text("SELECT slot_increment_minutes FROM tenant_settings WHERE tenant_id = :tid LIMIT 1"),
             {"tid": tenant_id},

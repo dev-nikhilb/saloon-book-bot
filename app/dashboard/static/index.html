@@ -1994,7 +1994,7 @@ async function loadServices() {
               </div>
               ${p.description ? `<div class="t-caption" style="margin-top:2px">${escHtml(p.description)}</div>` : ''}
             </div>
-            ${!isCat ? `<div style="text-align:right;margin-right:0.5rem"><div class="t-subhead t-num" style="font-weight:700">${formatCurrency(p.price_paise)}</div><div class="t-caption t-num">${p.duration_minutes} min${p.buffer_minutes ? ` + ${p.buffer_minutes}m buf` : ''}</div></div>` : ''}
+            ${!isCat ? `<div style="text-align:right;margin-right:0.5rem"><div class="t-subhead t-num" style="font-weight:700">${formatCurrency(p.price_paise)}</div><div class="t-caption t-num">${p.duration_minutes} min${p.buffer_minutes ? ` + ${p.buffer_minutes}m buf` : ''}${p.slot_increment_minutes ? ` · slots ${p.slot_increment_minutes}m` : ''}</div></div>` : ''}
             ${renderActions(p, isCat)}
           </div>
           ${kids.length ? `<div class="tree-child-wrap">${kids.map(c => `
@@ -2006,7 +2006,7 @@ async function loadServices() {
                 </div>
                 ${c.description ? `<div class="t-caption">${escHtml(c.description)}</div>` : ''}
               </div>
-              <div style="text-align:right;margin-right:0.5rem"><div class="t-body t-num" style="font-weight:700">${formatCurrency(c.price_paise)}</div><div class="t-caption t-num">${c.duration_minutes} min</div></div>
+              <div style="text-align:right;margin-right:0.5rem"><div class="t-body t-num" style="font-weight:700">${formatCurrency(c.price_paise)}</div><div class="t-caption t-num">${c.duration_minutes} min${c.buffer_minutes ? ` + ${c.buffer_minutes}m buf` : ''}${c.slot_increment_minutes ? ` · slots ${c.slot_increment_minutes}m` : ''}</div></div>
               ${renderActions(c, false)}
             </div>`).join('')}</div>` : ''}
         </div>`;
@@ -2020,9 +2020,10 @@ async function openServiceForm(editId = null, isCategory = false, parentId = nul
   if (svc && !svc.duration_minutes && !svc.price_paise) isCategory = true;
 
   const parents = state.services.filter(s => !s.parent_service_id && s.id !== editId);
+  const defaultInc = state.tenantSettings?.slot_increment_minutes || 15;
   openModal(editId ? 'Edit Item' : (isCategory ? 'New Category' : `New ${getLabels().service}`), `
     <form id="svc-form" style="display:flex;flex-direction:column;gap:0.9rem">
-      <div><label class="field-label">Name *</label><input name="name" class="input" required value="${escHtml(svc?.name || '')}"></div>
+      <div><label class="field-label">Name *</label><input name="name" class="input" required value="${escHtml(svc?.name || '')}" placeholder="e.g. Haircut, Beard Trim"></div>
       <div><label class="field-label">Description</label><textarea name="description" class="textarea" rows="2">${escHtml(svc?.description || '')}</textarea></div>
       ${!isCategory ? `
         <div>
@@ -2033,15 +2034,27 @@ async function openServiceForm(editId = null, isCategory = false, parentId = nul
           </select>
         </div>
         <div class="grid-2">
-          <div><label class="field-label">Duration (min) *</label><input name="duration_minutes" type="number" min="5" step="5" class="input" required value="${svc?.duration_minutes || 30}"></div>
+          <div><label class="field-label">Duration (min) *</label><input id="svc-dur" name="duration_minutes" type="number" min="5" max="480" step="5" class="input" required value="${svc?.duration_minutes || 30}" oninput="updateSvcSlotPreview()"></div>
           <div><label class="field-label">Price (₹)</label><input name="price" type="number" min="0" class="input" value="${svc?.price_paise != null ? Math.round(svc.price_paise / 100) : ''}"></div>
         </div>
         <div class="grid-2">
-          <div><label class="field-label">Buffer After (min)</label><input name="buffer_minutes" type="number" min="0" step="5" class="input" value="${svc?.buffer_minutes || 0}"></div>
-          <div><label class="field-label">Sort Order</label><input name="sort_order" type="number" min="0" class="input" value="${svc?.sort_order || 0}"></div>
+          <div><label class="field-label">Buffer After (min)</label><input id="svc-buf" name="buffer_minutes" type="number" min="0" max="120" step="5" class="input" value="${svc?.buffer_minutes || 0}" oninput="updateSvcSlotPreview()"></div>
+          <div><label class="field-label">Slot Interval (min)</label><input id="svc-inc" name="slot_increment_minutes" type="number" min="5" max="240" step="5" class="input" placeholder="Default (${defaultInc} min)" value="${svc?.slot_increment_minutes ?? ''}" oninput="updateSvcSlotPreview()"></div>
         </div>
+        <div style="padding:0.65rem 0.8rem;border-radius:11px;background:var(--surface-secondary);display:flex;flex-direction:column;gap:0.45rem">
+          <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.35rem">
+            <span class="t-micro">Quick Slot Presets</span>
+            <div style="display:flex;flex-wrap:wrap;gap:0.3rem">
+              <button type="button" class="btn btn-soft-blue btn-sm" style="padding:2px 8px;font-size:0.72rem" onclick="setSvcSlotPreset('match')">Match Duration</button>
+              ${[15,20,30,45,60].map(m => `<button type="button" class="btn btn-secondary btn-sm" style="padding:2px 7px;font-size:0.72rem" onclick="setSvcSlotPreset(${m})">${m}m</button>`).join('')}
+              <button type="button" class="btn btn-ghost btn-sm" style="padding:2px 7px;font-size:0.72rem" onclick="setSvcSlotPreset('')">Default</button>
+            </div>
+          </div>
+          <div id="svc-slot-preview" class="t-caption t-num" style="color:var(--label)"></div>
+        </div>
+        <div><label class="field-label">Sort Order</label><input name="sort_order" type="number" min="0" class="input" value="${svc?.sort_order || 0}"></div>
         <div style="display:flex;align-items:center;justify-content:space-between;padding:0.5rem 0">
-          <div><div class="t-body" style="font-weight:600">Require Advance Deposit</div><div class="t-caption">Collect via Razorpay before confirming</div></div>
+          <div><div class="t-body" style="font-weight:600">Require Advance Deposit</div><div class="t-caption">Collect via Razorpay / UPI before confirming</div></div>
           <label class="apple-switch">
             <input type="checkbox" name="requires_deposit" ${svc?.requires_deposit ? 'checked' : ''} onchange="document.getElementById('dep-row').classList.toggle('hidden',!this.checked)">
             <span class="apple-switch-track"><span class="apple-switch-thumb"></span></span>
@@ -2057,6 +2070,38 @@ async function openServiceForm(editId = null, isCategory = false, parentId = nul
     <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
     <button class="btn btn-primary" onclick="saveService('${editId || ''}', ${isCategory}, '${parentId || ''}')">Save</button>
   `);
+  if (!isCategory) updateSvcSlotPreview();
+}
+
+function setSvcSlotPreset(val) {
+  const incEl = document.getElementById('svc-inc');
+  if (!incEl) return;
+  if (val === 'match') {
+    const dur = Math.max(5, parseInt(document.getElementById('svc-dur')?.value, 10) || 30);
+    const buf = Math.max(0, parseInt(document.getElementById('svc-buf')?.value, 10) || 0);
+    incEl.value = Math.min(240, dur + buf);
+  } else {
+    incEl.value = val === '' ? '' : val;
+  }
+  updateSvcSlotPreview();
+}
+
+function updateSvcSlotPreview() {
+  const el = document.getElementById('svc-slot-preview');
+  if (!el) return;
+  const defaultInc = state.tenantSettings?.slot_increment_minutes || 15;
+  const dur = Math.max(5, parseInt(document.getElementById('svc-dur')?.value, 10) || 30);
+  const rawInc = (document.getElementById('svc-inc')?.value || '').trim();
+  const inc = rawInc ? Math.max(5, Math.min(240, parseInt(rawInc, 10) || defaultInc)) : defaultInc;
+  const fmt = (mins) => {
+    const h24 = Math.floor(mins / 60) % 24;
+    const m = mins % 60;
+    const ap = h24 >= 12 ? 'PM' : 'AM';
+    const h12 = h24 % 12 || 12;
+    return `${h12}:${String(m).padStart(2, '0')} ${ap}`;
+  };
+  const times = [0, 1, 2, 3].map(i => fmt(9 * 60 + i * inc));
+  el.innerHTML = `<strong>${dur} min</strong> service · slots every <strong>${inc} min</strong>${rawInc ? '' : ' (business default)'}: ${times.join(' · ')}`;
 }
 
 async function saveService(editId, isCategory, defaultParentId) {
@@ -2070,6 +2115,8 @@ async function saveService(editId, isCategory, defaultParentId) {
     body.duration_minutes = parseInt(fd.get('duration_minutes')) || 30;
     body.price_paise = fd.get('price') !== '' ? Math.round(parseFloat(fd.get('price')) * 100) : null;
     body.buffer_minutes = parseInt(fd.get('buffer_minutes')) || 0;
+    const rawSlotInc = (fd.get('slot_increment_minutes') || '').trim();
+    body.slot_increment_minutes = rawSlotInc ? parseInt(rawSlotInc, 10) : null;
     body.requires_deposit = !!form.querySelector('[name=requires_deposit]')?.checked;
     body.deposit_amount_paise = fd.get('deposit_amount') ? Math.round(parseFloat(fd.get('deposit_amount')) * 100) : null;
   } else {
@@ -2609,10 +2656,11 @@ async function renderSettings() {
               <div><label class="field-label">Advance Days</label><input name="advance_booking_days" type="number" class="input" value="${s.advance_booking_days || 14}"></div>
               <div><label class="field-label">Min Cancel Hrs</label><input name="min_cancel_hours" type="number" class="input" value="${s.min_cancel_hours ?? 2}"></div>
               <div>
-                <label class="field-label">Slot Increment</label>
+                <label class="field-label">Default Slot Interval</label>
                 <select name="slot_increment_minutes" class="select">
-                  ${[10,15,20,30].map(m => `<option value="${m}" ${(s.slot_increment_minutes || 15) == m ? 'selected' : ''}>${m} min</option>`).join('')}
+                  ${[10,15,20,30,45,60].map(m => `<option value="${m}" ${(s.slot_increment_minutes || 15) == m ? 'selected' : ''}>${m} min</option>`).join('')}
                 </select>
+                <div class="t-caption" style="margin-top:3px">Can be overridden per service in Services</div>
               </div>
               <div><label class="field-label">Max / Customer</label><input name="max_bookings_per_customer" type="number" class="input" value="${s.max_bookings_per_customer || 5}"></div>
             </div>

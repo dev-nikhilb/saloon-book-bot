@@ -113,6 +113,7 @@ class ServiceCreate(BaseModel):
     image_url: str | None = None
     duration_minutes: int = Field(0, ge=0)
     buffer_minutes: int = Field(0, ge=0)
+    slot_increment_minutes: int | None = Field(None, ge=5, le=240)
     price_paise: int | None = None
     requires_deposit: bool = False
     deposit_amount_paise: int | None = None
@@ -127,6 +128,7 @@ class ServiceUpdate(BaseModel):
     parent_service_id: str | None = None
     duration_minutes: int | None = Field(None, ge=0)
     buffer_minutes: int | None = Field(None, ge=0)
+    slot_increment_minutes: int | None = Field(None, ge=5, le=240)
     price_paise: int | None = None
     requires_deposit: bool | None = None
     deposit_amount_paise: int | None = None
@@ -703,10 +705,10 @@ async def create_service(
         text(
             "INSERT INTO services "
             "(id, tenant_id, parent_service_id, name, description, image_url, "
-            "duration_minutes, buffer_minutes, price_paise, requires_deposit, "
+            "duration_minutes, buffer_minutes, slot_increment_minutes, price_paise, requires_deposit, "
             "deposit_amount_paise, sort_order) "
             "VALUES (:id, :tid, :parent_id, :name, :description, :image_url, "
-            ":duration, :buffer, :price, :deposit_req, :deposit_amt, :sort_order)"
+            ":duration, :buffer, :slot_inc, :price, :deposit_req, :deposit_amt, :sort_order)"
         ),
         {
             "id": service_id,
@@ -717,6 +719,7 @@ async def create_service(
             "image_url": body.image_url,
             "duration": body.duration_minutes,
             "buffer": body.buffer_minutes,
+            "slot_inc": body.slot_increment_minutes,
             "price": body.price_paise,
             "deposit_req": body.requires_deposit,
             "deposit_amt": body.deposit_amount_paise,

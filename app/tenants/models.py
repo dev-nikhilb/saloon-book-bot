@@ -95,6 +95,7 @@ class Service(Base):
     image_url: Mapped[str | None] = mapped_column(Text)
     duration_minutes: Mapped[int] = mapped_column(Integer, nullable=False)
     buffer_minutes: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")  # gap after each booking
+    slot_increment_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)  # optional per-service slot step override
     price_paise: Mapped[int | None] = mapped_column(Integer)
     requires_deposit: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     deposit_amount_paise: Mapped[int | None] = mapped_column(Integer)

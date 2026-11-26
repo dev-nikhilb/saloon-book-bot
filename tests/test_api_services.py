@@ -289,3 +289,80 @@ class TestServiceCRUD:
             "parent_service_id": fake_parent,
         })
         assert resp.status_code == 404
+
+    def test_per_service_slot_increment_overrides_business_default(self, client):
+        """Haircut (45m, slots every 45m) and Beard Trim (20m, slots every 20m) generate independent slot steps."""
+        from datetime import date, datetime, timedelta
+
+        slug = random_slug()
+        signup_resp = client.post("/api/auth/signup", json={
+            "business_name": "Slot Config Salon",
+            "owner_name": "Tester",
+            "owner_phone": random_phone(),
+            "business_type": "salon",
+            "slug": slug,
+        })
+        assert signup_resp.status_code == 201
+        headers = auth_headers(signup_resp.json()["access_token"])
+
+        # Business default slot increment is 15m
+        haircut = client.post("/api/services", headers=headers, json={
+            "name": "Haircut",
+            "duration_minutes": 45,
+            "slot_increment_minutes": 45,
+            "price_paise": 50000,
+        })
+        assert haircut.status_code == 201
+        assert haircut.json()["slot_increment_minutes"] == 45
+
+        beard = client.post("/api/services", headers=headers, json={
+            "name": "Beard Trim",
+            "duration_minutes": 20,
+            "slot_increment_minutes": 20,
+            "price_paise": 20000,
+        })
+        assert beard.status_code == 201
+        assert beard.json()["slot_increment_minutes"] == 20
+
+        # Pick next weekday (Mon-Sat) at least 2 days ahead so operating hours apply
+        target = date.today() + timedelta(days=2)
+        while target.weekday() == 6:  # skip Sunday
+            target += timedelta(days=1)
+
+        hc_slots = client.get(
+            f"/api/public/business/{slug}/slots",
+            params={"service_id": haircut.json()["id"], "date": target.isoformat()},
+        ).json()["slots"]
+        assert len(hc_slots) >= 2
+        hc_gap = (datetime.fromisoformat(hc_slots[1]["start"]) - datetime.fromisoformat(hc_slots[0]["start"])).total_seconds()
+        assert hc_gap == 45 * 60
+        hc_dur = (datetime.fromisoformat(hc_slots[0]["end"]) - datetime.fromisoformat(hc_slots[0]["start"])).total_seconds()
+        assert hc_dur == 45 * 60
+
+        bt_slots = client.get(
+            f"/api/public/business/{slug}/slots",
+            params={"service_id": beard.json()["id"], "date": target.isoformat()},
+        ).json()["slots"]
+        assert len(bt_slots) >= 2
+        bt_gap = (datetime.fromisoformat(bt_slots[1]["start"]) - datetime.fromisoformat(bt_slots[0]["start"])).total_seconds()
+        assert bt_gap == 20 * 60
+        bt_dur = (datetime.fromisoformat(bt_slots[0]["end"]) - datetime.fromisoformat(bt_slots[0]["start"])).total_seconds()
+        assert bt_dur == 20 * 60
+
+        # Clearing slot_increment_minutes back to null falls back to tenant default (15m)
+        upd = client.put(
+            f"/api/services/{beard.json()['id']}",
+            headers=headers,
+            json={"slot_increment_minutes": None},
+        )
+        assert upd.status_code == 200
+        assert upd.json()["slot_increment_minutes"] is None
+        bt_default_slots = client.get(
+            f"/api/public/business/{slug}/slots",
+            params={"service_id": beard.json()["id"], "date": target.isoformat()},
+        ).json()["slots"]
+        bt_default_gap = (
+            datetime.fromisoformat(bt_default_slots[1]["start"]) - datetime.fromisoformat(bt_default_slots[0]["start"])
+        ).total_seconds()
+        assert bt_default_gap == 15 * 60
+
