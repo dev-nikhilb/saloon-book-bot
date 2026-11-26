@@ -59,8 +59,10 @@ def is_email_otp_configured() -> bool:
     return bool(settings.resend_api_key or (settings.smtp_host and settings.smtp_user and settings.smtp_pass))
 
 
-async def _send_email_otp(to_email: str, code: str, business_name: str = "BookBot", purpose: str = "login") -> str | None:
-    """Send 6-digit OTP via Resend API or SMTP. Returns delivery channel name or None."""
+async def _send_email_otp(
+    to_email: str, code: str, business_name: str = "BookBot", purpose: str = "login"
+) -> tuple[str | None, str | None]:
+    """Send 6-digit OTP via Resend API or SMTP. Returns (channel_or_none, error_message_or_none)."""
     subject = f"{code} is your BookBot {'verification' if purpose == 'signup' else 'login'} code"
     html_body = (
         f"<div style='font-family:-apple-system,BlinkMacSystemFont,sans-serif;max-width:460px;margin:0 auto;padding:24px'>"
@@ -73,6 +75,7 @@ async def _send_email_otp(to_email: str, code: str, business_name: str = "BookBo
         f"</div>"
     )
     plain_body = f"Your BookBot code is {code}. Valid for 5 minutes."
+    last_error: str | None = None
 
     # 1. Resend HTTP API (3,000 emails/mo free)
     if settings.resend_api_key:
@@ -93,9 +96,15 @@ async def _send_email_otp(to_email: str, code: str, business_name: str = "BookBo
                     },
                 )
                 if 200 <= r.status_code < 300:
-                    return "email_resend"
+                    return "email_resend", None
+                try:
+                    err_msg = r.json().get("message") or r.text[:200]
+                except Exception:
+                    err_msg = r.text[:200]
+                last_error = f"Email provider error ({r.status_code}): {err_msg}"
                 logger.warning("resend_otp_failed", status=r.status_code, body=r.text[:200])
         except Exception as exc:
+            last_error = f"Email provider connection error: {exc}"
             logger.warning("resend_otp_error", error=str(exc))
 
     # 2. SMTP (Gmail App Password, Brevo, Zoho, etc. — free)
@@ -114,11 +123,12 @@ async def _send_email_otp(to_email: str, code: str, business_name: str = "BookBo
 
         try:
             await asyncio.to_thread(_send_smtp)
-            return "email_smtp"
+            return "email_smtp", None
         except Exception as exc:
+            last_error = f"SMTP email error: {exc}"
             logger.warning("smtp_otp_error", error=str(exc))
 
-    return None
+    return None, last_error
 
 
 async def _store_otp(db: AsyncSession | None, identifier: str, code: str, purpose: str = "login") -> None:
@@ -171,7 +181,9 @@ async def request_signup_otp(db: AsyncSession, email: str, business_name: str = 
     code = generate_otp()
     await _store_otp(db, ident, code, purpose="signup")
 
-    delivered_via = await _send_email_otp(ident, code, business_name=business_name, purpose="signup")
+    delivered_via, delivery_error = await _send_email_otp(
+        ident, code, business_name=business_name, purpose="signup"
+    )
     if not delivered_via:
         delivered_via = "log"
 
@@ -182,6 +194,7 @@ async def request_signup_otp(db: AsyncSession, email: str, business_name: str = 
         "otp_required": is_email_otp_configured(),
         "expires_in": OTP_TTL_SECONDS,
         "delivered_via": delivered_via,
+        "delivery_error": delivery_error,
     }
     if settings.environment == "development":
         resp["dev_otp"] = code
@@ -228,8 +241,11 @@ async def request_otp(db: AsyncSession, identifier: str) -> dict:
 
     # Prefer Email delivery when email is available and Resend/SMTP is configured (100% free!)
     target_email = tenant.owner_email or (ident if is_email else None)
+    delivery_error: str | None = None
     if target_email and is_email_otp_configured():
-        email_chan = await _send_email_otp(target_email, code, business_name=tenant.business_name, purpose="login")
+        email_chan, delivery_error = await _send_email_otp(
+            target_email, code, business_name=tenant.business_name, purpose="login"
+        )
         if email_chan:
             delivered_via = email_chan
 
@@ -260,6 +276,7 @@ async def request_otp(db: AsyncSession, identifier: str) -> dict:
         "expires_in": OTP_TTL_SECONDS,
         "delivered_via": delivered_via,
         "email_configured": is_email_otp_configured(),
+        "delivery_error": delivery_error,
     }
     if settings.environment == "development":
         resp["dev_otp"] = code

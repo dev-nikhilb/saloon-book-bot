@@ -301,7 +301,10 @@ async def request_signup_verification_otp(body: SignupOtpRequest, db: AsyncSessi
     if existing_email.first():
         raise HTTPException(status_code=409, detail="An account with this email already exists. Please sign in.")
 
-    return await request_signup_otp(db, email, business_name=body.business_name or "BookBot")
+    res = await request_signup_otp(db, email, business_name=body.business_name or "BookBot")
+    if res.get("otp_required") and not res.get("sent") and res.get("delivery_error"):
+        raise HTTPException(status_code=502, detail=res["delivery_error"])
+    return res
 
 
 @router.post("/auth/signup", response_model=SignupResponse, status_code=201)
@@ -416,6 +419,9 @@ async def request_login_otp(body: OtpRequest, db: AsyncSession = Depends(get_db)
         raise HTTPException(status_code=404, detail="No account found for this phone or email")
     if not result["active"]:
         raise HTTPException(status_code=403, detail="Account is deactivated")
+
+    if result.get("delivered_via") == "log" and result.get("delivery_error"):
+        raise HTTPException(status_code=502, detail=result["delivery_error"])
 
     resp = {
         "sent": True,
