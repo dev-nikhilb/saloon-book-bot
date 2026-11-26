@@ -1,27 +1,27 @@
 from logging.config import fileConfig
 
-from alembic import context
 from sqlalchemy import engine_from_config, pool
 
-from app.config import settings
-from app.database import Base
+import app.billing.models  # noqa: F401
+import app.bookings.models  # noqa: F401
+import app.customers.models  # noqa: F401
+import app.feedback.models  # noqa: F401
+import app.messaging.models  # noqa: F401
+import app.payments.models  # noqa: F401
+import app.reminders.models  # noqa: F401
 
 # Import all models so Alembic sees them
 import app.tenants.models  # noqa: F401
-import app.customers.models  # noqa: F401
-import app.bookings.models  # noqa: F401
-import app.reminders.models  # noqa: F401
-import app.payments.models  # noqa: F401
-import app.feedback.models  # noqa: F401
-import app.billing.models  # noqa: F401
-import app.messaging.models  # noqa: F401
+from alembic import context
+from app.config import settings
+from app.database import Base, _normalize_db_url
 
 config = context.config
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-config.set_main_option("sqlalchemy.url", settings.database_url)
+config.set_main_option("sqlalchemy.url", _normalize_db_url(settings.database_url))
 
 target_metadata = Base.metadata
 
