@@ -620,11 +620,8 @@ html[data-theme="dark"] .apple-toast { background: rgba(58, 58, 60, 0.92); }
     </div>
 
     <div id="login-step-phone">
-      <label class="field-label">Owner Phone Number</label>
-      <div class="phone-group">
-        <span class="phone-prefix">+91</span>
-        <input id="login-phone" class="input" type="tel" maxlength="10" placeholder="9876543210" autocomplete="tel">
-      </div>
+      <label class="field-label">Owner Email or Mobile Number</label>
+      <input id="login-phone" class="input" type="text" placeholder="owner@business.in or 9876543210" autocomplete="username">
       <button id="btn-send-otp" class="btn btn-primary" style="width:100%;margin-top:1rem;padding:0.7rem" onclick="sendOtp()">Continue with OTP</button>
     </div>
 
@@ -772,7 +769,7 @@ class FluidSpring {
   }
   to(target, { velocity, dampingRatio, response, onUpdate, onRest } = {}) {
     if (onUpdate) this._onUpdate = onUpdate;
-    if (onRest) this._onRest = onRest;
+    this._onRest = onRest || null;
     if (dampingRatio != null) this.dampingRatio = dampingRatio;
     if (response != null) this.response = response;
     this.target = target;
@@ -810,12 +807,17 @@ class FluidSpring {
 
     if (this._onUpdate) this._onUpdate(this.value);
 
-    if (Math.abs(this.value - this.target) < 0.35 && Math.abs(this.velocity) < 0.5) {
+    const isUnitRange = Math.abs(this.target) <= 2 && Math.abs(this.value) <= 2;
+    const posEps = isUnitRange ? 0.002 : 0.35;
+    const velEps = isUnitRange ? 0.01 : 0.5;
+    if (Math.abs(this.value - this.target) < posEps && Math.abs(this.velocity) < velEps) {
       this.value = this.target;
       this.velocity = 0;
       this._raf = null;
       if (this._onUpdate) this._onUpdate(this.value);
-      if (this._onRest) this._onRest();
+      const cb = this._onRest;
+      this._onRest = null;
+      if (cb) cb();
       return;
     }
     this._raf = requestAnimationFrame((t) => this._step(t));
@@ -1261,14 +1263,27 @@ function resetLoginStep() {
 }
 
 async function sendOtp() {
-  const phone = document.getElementById('login-phone').value.trim();
+  const raw = document.getElementById('login-phone').value.trim();
   const errEl = document.getElementById('login-error');
-  if (!/^\d{10}$/.test(phone)) {
-    errEl.textContent = 'Enter a valid 10-digit mobile number';
-    errEl.classList.remove('hidden');
-    return;
+  let identifier = raw;
+  if (raw.includes('@')) {
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw)) {
+      errEl.textContent = 'Enter a valid email address or 10-digit mobile number';
+      errEl.classList.remove('hidden');
+      return;
+    }
+    identifier = raw.toLowerCase();
+  } else {
+    const digits = raw.replace(/[\s\-()]/g, '');
+    if (/^\d{10}$/.test(digits)) identifier = `+91${digits}`;
+    else if (/^\+\d{10,15}$/.test(digits)) identifier = digits;
+    else {
+      errEl.textContent = 'Enter a valid email address or 10-digit mobile number';
+      errEl.classList.remove('hidden');
+      return;
+    }
   }
-  state.phone = phone;
+  state.phone = identifier;
   const btn = document.getElementById('btn-send-otp');
   btn.disabled = true; btn.textContent = 'Sending code…';
   errEl.classList.add('hidden');
@@ -1276,18 +1291,22 @@ async function sendOtp() {
     const resp = await fetch(`${API_BASE}/auth/request-otp`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone: `+91${phone}` })
+      body: JSON.stringify({ identifier })
     });
     const data = await resp.json();
-    if (!resp.ok) throw new Error(data.detail || 'No account found for this phone');
+    if (!resp.ok) throw new Error(data.detail || 'No account found for this email or phone');
     document.getElementById('login-step-phone').classList.add('hidden');
     document.getElementById('login-step-otp').classList.remove('hidden');
     if (data.dev_otp) {
       document.getElementById('login-otp').value = data.dev_otp;
       document.getElementById('otp-hint').textContent = `Dev mode code pre-filled: ${data.dev_otp}`;
       toast(`Dev OTP: ${data.dev_otp}`, 'info');
-    } else {
+    } else if (data.delivered_via && data.delivered_via.startsWith('email')) {
+      document.getElementById('otp-hint').textContent = 'Enter the 6-digit code sent to your email inbox';
+    } else if (data.delivered_via === 'whatsapp') {
       document.getElementById('otp-hint').textContent = 'Enter the 6-digit code sent to your WhatsApp';
+    } else {
+      document.getElementById('otp-hint').textContent = 'Configure free Resend / Gmail SMTP env vars in Vercel to receive OTP emails.';
     }
     document.getElementById('login-otp').focus();
   } catch (e) {
@@ -1313,7 +1332,7 @@ async function verifyOtp() {
     const resp = await fetch(`${API_BASE}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ phone: `+91${state.phone}`, otp })
+      body: JSON.stringify({ phone: state.phone, otp })
     });
     const data = await resp.json();
     if (!resp.ok) throw new Error(data.detail || 'Invalid OTP');
@@ -2429,6 +2448,7 @@ async function renderSettings() {
         <form id="set-profile" style="display:flex;flex-direction:column;gap:0.9rem">
           <div class="grid-2">
             <div><label class="field-label">Business Name</label><input name="business_name" class="input" value="${escHtml(t.business_name || '')}"></div>
+            <div><label class="field-label">Owner Email (for OTP &amp; Invoices)</label><input name="owner_email" type="email" class="input" value="${escHtml(t.owner_email || '')}" placeholder="owner@business.in"></div>
             <div>
               <label class="field-label">Industry Vertical</label>
               <select name="business_type" class="select">
@@ -2585,6 +2605,7 @@ async function saveProfile() {
   try {
     const updated = await apiPut('/tenant', {
       business_name: fd.get('business_name'),
+      owner_email: (fd.get('owner_email') || '').trim() || null,
       business_type: fd.get('business_type'),
       timezone: fd.get('timezone'),
       primary_language: fd.get('primary_language')
@@ -2720,13 +2741,16 @@ async function loadBillingBox() {
     const statusPillClass = sub.is_expired ? 'pill-cancelled' : (sub.access_mode === 'grace_warning' ? 'pill-pending_deposit' : 'pill-confirmed');
 
     box.innerHTML = `
-      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.75rem;padding:0.85rem 1rem;border-radius:12px;background:${sub.is_expired ? 'var(--red-soft)' : 'var(--blue-soft)'};margin-bottom:1rem">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.75rem;padding:0.9rem 1rem;border-radius:12px;background:${sub.is_expired ? 'var(--red-soft)' : 'var(--blue-soft)'};margin-bottom:1rem">
         <div>
           <strong style="color:${sub.is_expired ? 'var(--red-text)' : 'var(--blue)'};text-transform:uppercase;font-size:0.78rem;letter-spacing:0.05em">${escHtml(sub.plan_tier)} Plan (${escHtml(sub.billing_cycle || 'monthly')})</strong>
-          <span class="pill ${statusPillClass}" style="margin-left:0.5rem">${escHtml(sub.status)}</span>
-          ${sub.days_remaining != null ? `<span class="t-caption" style="margin-left:0.5rem">${sub.days_remaining}d remaining</span>` : ''}
+          <span class="pill ${statusPillClass}" style="margin-left:0.5rem">${sub.status === 'trial' ? '14-Day Free Trial' : escHtml(sub.status)}</span>
+          ${sub.days_remaining != null ? `<span class="t-caption" style="margin-left:0.5rem">${sub.days_remaining}d left${sub.status === 'trial' ? ' — switching plans keeps your free trial' : ''}</span>` : ''}
         </div>
-        ${sub.status === 'active' && !sub.cancel_at_period_end ? `<button class="btn btn-ghost btn-sm" style="color:var(--red-text)" onclick="cancelMySubscription()">Cancel at Period End</button>` : ''}
+        <div style="display:flex;gap:0.45rem;align-items:center">
+          ${sub.status === 'trial' ? `<button class="btn btn-secondary btn-sm" onclick="switchPlan('${escHtml(sub.plan_tier)}', true)">Subscribe Early</button>` : ''}
+          ${sub.status === 'active' && !sub.cancel_at_period_end ? `<button class="btn btn-ghost btn-sm" style="color:var(--red-text)" onclick="cancelMySubscription()">Cancel at Period End</button>` : ''}
+        </div>
       </div>
 
       <div class="grid-3" style="margin-bottom:1rem;text-align:center">
@@ -2744,16 +2768,28 @@ async function loadBillingBox() {
 
       <div class="grid-3">
         ${plans.map(p => {
-          const isCur = p.tier === sub.plan_tier && !sub.is_expired && sub.status !== 'trial';
+          const isSelected = p.tier === sub.plan_tier && !sub.is_expired;
+          const isTrial = sub.status === 'trial' && !sub.is_expired;
           const price = isAnnual ? Math.round(p.price_annual_inr / 12) : p.price_monthly_inr;
           const subTxt = isAnnual ? `₹${p.price_annual_inr}/yr billed annually` : 'Billed monthly';
+          const btnLabel = isSelected
+            ? (isTrial ? 'Selected for Trial' : 'Current Plan')
+            : (isTrial ? `Switch Trial to ${p.name}` : (sub.is_expired ? `Renew ${p.name}` : `Choose ${p.name}`));
           return `
-          <div class="card card-tight" style="border:${isCur ? '1.5px solid var(--blue)' : '0.5px solid var(--hairline)'};box-shadow:none">
-            <div class="t-heading">${escHtml(p.name)}</div>
-            <div class="t-title t-num" style="margin:0.3rem 0 0.1rem">₹${price}<span class="t-caption">/mo</span></div>
-            <div class="t-caption" style="margin-bottom:0.6rem">${subTxt}</div>
-            <button class="btn ${isCur ? 'btn-secondary' : 'btn-primary'} btn-sm" style="width:100%" ${isCur ? 'disabled' : ''} onclick="switchPlan('${p.tier}')">
-              ${isCur ? 'Current Plan' : (sub.is_expired ? 'Renew ' : 'Choose ') + escHtml(p.name)}
+          <div class="card card-tight" style="border:${isSelected ? '1.5px solid var(--blue)' : '0.5px solid var(--hairline)'};box-shadow:none;display:flex;flex-direction:column;justify-content:space-between;gap:0.65rem">
+            <div>
+              <div style="display:flex;justify-content:space-between;align-items:center">
+                <div class="t-heading">${escHtml(p.name)}</div>
+                ${p.tier === 'growth' ? '<span class="pill pill-confirmed" style="font-size:0.66rem">Popular</span>' : ''}
+              </div>
+              <div class="t-title t-num" style="margin:0.3rem 0 0.1rem">₹${price}<span class="t-caption">/mo</span></div>
+              <div class="t-caption" style="margin-bottom:0.65rem">${subTxt}</div>
+              <ul style="list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:0.32rem;font-size:0.76rem;color:var(--label-secondary)">
+                ${(p.features || []).map(ft => `<li>✓ ${escHtml(ft)}</li>`).join('')}
+              </ul>
+            </div>
+            <button class="btn ${isSelected ? 'btn-secondary' : 'btn-primary'} btn-sm" style="width:100%" ${isSelected ? 'disabled' : ''} onclick="switchPlan('${p.tier}', false)">
+              ${escHtml(btnLabel)}
             </button>
           </div>`;
         }).join('')}
@@ -2773,10 +2809,16 @@ async function loadBillingBox() {
   } catch (e) {}
 }
 
-async function switchPlan(tier) {
+async function switchPlan(tier, skipTrial = false) {
   const cycle = state.billingCycle || 'monthly';
   try {
-    const res = await apiPost('/billing/checkout', { plan_tier: tier, billing_cycle: cycle });
+    const res = await apiPost('/billing/checkout', { plan_tier: tier, billing_cycle: cycle, skip_trial: !!skipTrial });
+    if (res.checkout_mode === 'trial_plan_updated') {
+      state.tenant.plan_tier = tier;
+      toast(`Selected ${tier.toUpperCase()} (${cycle}) — your 14-day free trial is preserved!`);
+      loadBillingBox();
+      return;
+    }
     if (res.checkout_mode === 'sandbox_activated') {
       state.tenant.plan_tier = tier;
       toast(`Activated ${tier.toUpperCase()} (${cycle}) plan`);

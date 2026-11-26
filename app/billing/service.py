@@ -132,7 +132,10 @@ def _get_razorpay_client() -> razorpay.Client:
 
 
 async def ensure_trial_subscription(
-    db: AsyncSession, tenant_id: uuid.UUID, plan_tier: str = "solo"
+    db: AsyncSession,
+    tenant_id: uuid.UUID,
+    plan_tier: str = "solo",
+    billing_cycle: str = "monthly",
 ) -> dict:
     """Create a 14-day trial subscription if the tenant does not already have one."""
     res = await db.execute(
@@ -146,6 +149,8 @@ async def ensure_trial_subscription(
     if row:
         return dict(row._mapping)
 
+    tier = plan_tier if plan_tier in PLANS else "solo"
+    cycle = billing_cycle if billing_cycle in ("monthly", "annual") else "monthly"
     now = datetime.now(timezone.utc)
     trial_end = now + timedelta(days=TRIAL_DAYS)
     sub_id = uuid.uuid4()
@@ -155,16 +160,16 @@ async def ensure_trial_subscription(
                 id, tenant_id, plan_tier, billing_cycle,
                 current_period_start, current_period_end, status, trial_ends_at
             ) VALUES (
-                :id, :tid, :tier, 'monthly', :start, :end, 'trial', :end
+                :id, :tid, :tier, :cycle, :start, :end, 'trial', :end
             )
         """),
-        {"id": sub_id, "tid": tenant_id, "tier": plan_tier, "start": now, "end": trial_end},
+        {"id": sub_id, "tid": tenant_id, "tier": tier, "cycle": cycle, "start": now, "end": trial_end},
     )
     return {
         "id": sub_id,
         "tenant_id": tenant_id,
-        "plan_tier": plan_tier,
-        "billing_cycle": "monthly",
+        "plan_tier": tier,
+        "billing_cycle": cycle,
         "current_period_start": now,
         "current_period_end": trial_end,
         "status": "trial",
@@ -670,10 +675,13 @@ async def create_subscription_checkout(
     tenant_id: uuid.UUID,
     plan_tier: str,
     billing_cycle: str = "monthly",
+    skip_trial: bool = False,
 ) -> dict:
     """Start a subscription upgrade/renewal checkout.
 
     - Validates plan tier, billing cycle, and downgrade constraints.
+    - If tenant is in an active 14-day trial and skip_trial=False -> preserves their
+      14-day free trial while updating their chosen plan_tier & billing_cycle!
     - When Razorpay keys + Razorpay Plan ID are configured -> creates Razorpay Subscription.
     - When Razorpay keys (no pre-created Plan ID) are configured -> creates Razorpay Order.
     - When Razorpay is not configured (dev/sandbox) -> activates immediately in sandbox mode.
@@ -684,6 +692,40 @@ async def create_subscription_checkout(
         raise ValueError("billing_cycle must be 'monthly' or 'annual'")
 
     await validate_plan_change(db, tenant_id, plan_tier)
+
+    # Preserve active 14-day free trial unless user explicitly skips trial to pay early
+    current_state = await get_subscription_state(db, tenant_id)
+    if (
+        not skip_trial
+        and current_state["status"] == "trial"
+        and current_state["access_mode"] == "full"
+    ):
+        now = datetime.now(timezone.utc)
+        await db.execute(
+            text("UPDATE tenants SET plan_tier = :tier, updated_at = :now WHERE id = :tid"),
+            {"tier": plan_tier, "now": now, "tid": tenant_id},
+        )
+        await db.execute(
+            text("""
+                UPDATE subscriptions
+                SET plan_tier = :tier, billing_cycle = :cycle
+                WHERE id = (
+                    SELECT id FROM subscriptions WHERE tenant_id = :tid
+                    ORDER BY current_period_end DESC LIMIT 1
+                )
+            """),
+            {"tier": plan_tier, "cycle": billing_cycle, "tid": tenant_id},
+        )
+        await db.commit()
+        summary = await get_usage_summary(db, tenant_id)
+        return {
+            "checkout_mode": "trial_plan_updated",
+            "plan_tier": plan_tier,
+            "billing_cycle": billing_cycle,
+            "amount_paise": 0,
+            "trial_preserved": True,
+            "subscription": summary,
+        }
 
     amount_paise = get_plan_amount_paise(plan_tier, billing_cycle)
     t_row = (

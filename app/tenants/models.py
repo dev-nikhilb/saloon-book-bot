@@ -16,6 +16,7 @@ class Tenant(Base):
     business_type: Mapped[str] = mapped_column(Text, nullable=False)
     owner_phone: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
     owner_name: Mapped[str | None] = mapped_column(Text)
+    owner_email: Mapped[str | None] = mapped_column(Text, index=True)
     slug: Mapped[str] = mapped_column(Text, nullable=False, unique=True)  # subdomain: slug.bookbot.com
     primary_language: Mapped[str] = mapped_column(Text, nullable=False, server_default="en")
     timezone: Mapped[str] = mapped_column(Text, nullable=False, server_default="Asia/Kolkata")

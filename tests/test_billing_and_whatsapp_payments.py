@@ -539,3 +539,80 @@ async def test_razorpay_payment_link_webhook_confirms_booking(db):
     p_row = (await db.execute(text("SELECT status, verified_by FROM payments WHERE razorpay_payment_link_id = :plid"), {"plid": plink_id})).first()
     assert p_row.status == "captured"
     assert p_row.verified_by == "webhook"
+
+
+@pytest.mark.asyncio
+async def test_trial_preserved_on_plan_switch_and_email_otp_signup(db):
+    """Switching plans during active 14-day trial preserves trial; signup stores owner_email & selected plan; Postgres OTP verifies cleanly."""
+    from app.auth.otp import request_signup_otp, verify_otp
+
+    client = TestClient(app)
+    uid = str(uuid.uuid4())[:8]
+    email = f"owner-{uid}@glowtest.in"
+    phone = f"+9196{str(uuid.uuid4().int)[:8]}"
+    slug = f"trial-{uid}"
+
+    # 1. Request signup OTP (stores in Postgres auth_otps + returns dev_otp in dev)
+    otp_res = await request_signup_otp(db, email, business_name="Trial Test Salon")
+    assert "dev_otp" in otp_res
+    ok, err = await verify_otp(email, otp_res["dev_otp"], db=db, purpose="signup")
+    assert ok is True and err == ""
+
+    # 2. Signup with owner_email + selected plan_tier='pro' + annual cycle
+    resp = client.post(
+        "/api/auth/signup",
+        json={
+            "business_name": "Trial Test Salon",
+            "owner_name": "Nikhil",
+            "owner_phone": phone,
+            "owner_email": email,
+            "business_type": "salon",
+            "slug": slug,
+            "plan_tier": "pro",
+            "billing_cycle": "annual",
+        },
+    )
+    assert resp.status_code == 201
+    tok = resp.json()["access_token"]
+    headers = {"Authorization": f"Bearer {tok}"}
+
+    # Verify owner_email & 14-day trial on pro/annual
+    t_prof = client.get("/api/tenant", headers=headers).json()
+    assert t_prof["owner_email"] == email
+    sub0 = client.get("/api/billing/subscription", headers=headers).json()
+    assert sub0["status"] == "trial"
+    assert sub0["plan_tier"] == "pro"
+    assert sub0["billing_cycle"] == "annual"
+
+    # 3. Switching plan during active trial MUST preserve status='trial' (NOT remove trial!)
+    sw = client.post(
+        "/api/billing/checkout",
+        headers=headers,
+        json={"plan_tier": "growth", "billing_cycle": "monthly", "skip_trial": False},
+    )
+    assert sw.status_code == 200
+    sw_data = sw.json()
+    assert sw_data["checkout_mode"] == "trial_plan_updated"
+    assert sw_data["trial_preserved"] is True
+    assert sw_data["subscription"]["status"] == "trial"
+    assert sw_data["subscription"]["plan_tier"] == "growth"
+
+    # 4. Edit service works cleanly (including parent_service_id)
+    cat = client.post("/api/services", headers=headers, json={"name": "Hair", "duration_minutes": 0}).json()
+    svc = client.post("/api/services", headers=headers, json={"name": "Cut", "duration_minutes": 30, "price_paise": 49900}).json()
+    upd = client.put(
+        f"/api/services/{svc['id']}",
+        headers=headers,
+        json={"name": "Precision Cut", "duration_minutes": 45, "price_paise": 59900, "parent_service_id": cat["id"]},
+    )
+    assert upd.status_code == 200
+    assert upd.json()["name"] == "Precision Cut"
+    assert upd.json()["parent_service_id"] == cat["id"]
+
+    # 5. Email login OTP works end-to-end via Postgres fallback
+    req_otp = client.post("/api/auth/request-otp", json={"identifier": email})
+    assert req_otp.status_code == 200
+    dev_code = req_otp.json()["dev_otp"]
+    login_resp = client.post("/api/auth/login", json={"phone": email, "otp": dev_code})
+    assert login_resp.status_code == 200
+    assert login_resp.json()["business_name"] == "Trial Test Salon"

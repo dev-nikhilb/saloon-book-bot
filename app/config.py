@@ -47,6 +47,14 @@ class Settings(BaseSettings):
     jwt_secret: str = ""  # falls back to encryption_key if empty
     base_domain: str = "localhost:8000"  # bookbot.com in production
 
+    # Free Email OTP (Resend API 3,000/mo free OR Gmail/Brevo SMTP 500/day free)
+    resend_api_key: str = ""
+    email_from: str = "BookBot <onboarding@resend.dev>"
+    smtp_host: str = ""
+    smtp_port: int = 587
+    smtp_user: str = ""
+    smtp_pass: str = ""
+
     # Observability
     sentry_dsn: str = ""
     log_level: str = "INFO"

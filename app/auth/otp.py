@@ -1,9 +1,27 @@
-"""WhatsApp/Redis OTP authentication service for business owners."""
+"""Free Email (Resend / Gmail SMTP) + WhatsApp OTP authentication service.
+
+Storage strategy (zero external Redis required on Vercel):
+  1. Uses Redis if configured and reachable.
+  2. Falls back automatically to PostgreSQL `auth_otps` table (works across all
+     Vercel Serverless instances on free Neon Postgres).
+
+Delivery strategy (100% free options):
+  1. Email via Resend HTTP API (`RESEND_API_KEY` — 3,000 emails/mo free)
+  2. Email via SMTP (`SMTP_HOST`, `SMTP_USER`, `SMTP_PASS` — e.g. Gmail App Password, 500/day free)
+  3. WhatsApp via Meta Cloud API (when tenant has WABA connected)
+"""
 from __future__ import annotations
 
+import asyncio
+import hashlib
 import hmac
 import secrets
+import smtplib
+import uuid
+from datetime import datetime, timedelta, timezone
+from email.message import EmailMessage
 
+import httpx
 import structlog
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,12 +35,18 @@ OTP_TTL_SECONDS = 300  # 5 minutes
 OTP_MAX_ATTEMPTS = 5
 
 
-def _otp_key(phone: str) -> str:
-    return f"auth:otp:{phone}"
+def _otp_key(identifier: str, purpose: str = "login") -> str:
+    return f"auth:otp:{purpose}:{identifier.lower().strip()}"
 
 
-def _attempts_key(phone: str) -> str:
-    return f"auth:otp_attempts:{phone}"
+def _attempts_key(identifier: str, purpose: str = "login") -> str:
+    return f"auth:otp_attempts:{purpose}:{identifier.lower().strip()}"
+
+
+def _hash_code(identifier: str, code: str) -> str:
+    secret = (settings.jwt_secret or settings.encryption_key or "bookbot-otp-salt").encode()
+    msg = f"{identifier.lower().strip()}:{code}".encode()
+    return hmac.new(secret, msg, hashlib.sha256).hexdigest()
 
 
 def generate_otp() -> str:
@@ -30,58 +54,132 @@ def generate_otp() -> str:
     return f"{secrets.randbelow(1_000_000):06d}"
 
 
-async def request_otp(db: AsyncSession, phone: str) -> dict:
-    """Generate and store a 6-digit OTP for an existing active tenant owner.
+def is_email_otp_configured() -> bool:
+    """Return True if either Resend API or SMTP credentials are configured."""
+    return bool(settings.resend_api_key or (settings.smtp_host and settings.smtp_user and settings.smtp_pass))
 
-    Sends the OTP over WhatsApp if the tenant has WABA configured.
-    In development, returns `dev_otp` in the response for convenient testing.
-    """
-    result = await db.execute(
-        text(
-            "SELECT id, business_name, owner_phone, waba_phone_number_id, is_active "
-            "FROM tenants WHERE owner_phone = :phone LIMIT 1"
-        ),
-        {"phone": phone},
+
+async def _send_email_otp(to_email: str, code: str, business_name: str = "BookBot", purpose: str = "login") -> str | None:
+    """Send 6-digit OTP via Resend API or SMTP. Returns delivery channel name or None."""
+    subject = f"{code} is your BookBot {'verification' if purpose == 'signup' else 'login'} code"
+    html_body = (
+        f"<div style='font-family:-apple-system,BlinkMacSystemFont,sans-serif;max-width:460px;margin:0 auto;padding:24px'>"
+        f"<h2 style='margin:0 0 8px;color:#1D1D1F'>BookBot Verification Code</h2>"
+        f"<p style='color:#6E6E73;margin:0 0 20px'>Use this 6-digit code to "
+        f"{'verify your new workspace' if purpose == 'signup' else f'sign in to {business_name}'}:</p>"
+        f"<div style='font-size:32px;font-weight:700;letter-spacing:6px;padding:16px 24px;"
+        f"background:#F5F5F7;border-radius:14px;text-align:center;color:#007AFF'>{code}</div>"
+        f"<p style='color:#86868B;font-size:13px;margin:20px 0 0'>Expires in 5 minutes. If you didn&rsquo;t request this, ignore this email.</p>"
+        f"</div>"
     )
-    tenant = result.first()
-    if not tenant:
-        return {"found": False, "active": False}
-    if not tenant.is_active:
-        return {"found": True, "active": False}
+    plain_body = f"Your BookBot code is {code}. Valid for 5 minutes."
 
-    code = generate_otp()
+    # 1. Resend HTTP API (3,000 emails/mo free)
+    if settings.resend_api_key:
+        try:
+            async with httpx.AsyncClient(timeout=8.0) as client:
+                r = await client.post(
+                    "https://api.resend.com/emails",
+                    headers={
+                        "Authorization": f"Bearer {settings.resend_api_key}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "from": settings.email_from,
+                        "to": [to_email],
+                        "subject": subject,
+                        "html": html_body,
+                        "text": plain_body,
+                    },
+                )
+                if 200 <= r.status_code < 300:
+                    return "email_resend"
+                logger.warning("resend_otp_failed", status=r.status_code, body=r.text[:200])
+        except Exception as exc:
+            logger.warning("resend_otp_error", error=str(exc))
+
+    # 2. SMTP (Gmail App Password, Brevo, Zoho, etc. — free)
+    if settings.smtp_host and settings.smtp_user and settings.smtp_pass:
+        def _send_smtp():
+            msg = EmailMessage()
+            msg["Subject"] = subject
+            msg["From"] = settings.smtp_user
+            msg["To"] = to_email
+            msg.set_content(plain_body)
+            msg.add_alternative(html_body, subtype="html")
+            with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=10) as srv:
+                srv.starttls()
+                srv.login(settings.smtp_user, settings.smtp_pass)
+                srv.send_message(msg)
+
+        try:
+            await asyncio.to_thread(_send_smtp)
+            return "email_smtp"
+        except Exception as exc:
+            logger.warning("smtp_otp_error", error=str(exc))
+
+    return None
+
+
+async def _store_otp(db: AsyncSession | None, identifier: str, code: str, purpose: str = "login") -> None:
+    """Persist OTP in Redis (fast) AND/OR Postgres `auth_otps` (serverless-safe fallback)."""
+    ident = identifier.lower().strip()
+    stored_redis = False
     try:
         r = await get_redis()
-        await r.set(_otp_key(phone), code, ex=OTP_TTL_SECONDS)
-        await r.delete(_attempts_key(phone))
+        await r.set(_otp_key(ident, purpose), code, ex=OTP_TTL_SECONDS)
+        await r.delete(_attempts_key(ident, purpose))
+        # Backward compat key for legacy login tests reading auth:otp:{phone}
+        if purpose == "login":
+            await r.set(f"auth:otp:{ident}", code, ex=OTP_TTL_SECONDS)
+            await r.delete(f"auth:otp_attempts:{ident}")
+        stored_redis = True
     except Exception as exc:
-        logger.warning("otp_redis_unavailable", error=str(exc))
+        logger.debug("otp_redis_fallback_to_pg", error=str(exc))
 
-    # Deliver via WhatsApp if tenant has WABA configured
-    delivered_via = "log"
-    if tenant.waba_phone_number_id:
+    if db is not None:
         try:
-            from app.messaging.whatsapp.client import send_text_message
-
-            sent = await send_text_message(
-                phone_number_id=tenant.waba_phone_number_id,
-                to=phone.lstrip("+"),
-                text=(
-                    f"🔐 Your BookBot login code for *{tenant.business_name}* is *{code}*.\n"
-                    f"Valid for 5 minutes. Do not share this code."
-                ),
-                tenant_id=str(tenant.id),
+            now = datetime.now(timezone.utc)
+            exp = now + timedelta(seconds=OTP_TTL_SECONDS)
+            await db.execute(
+                text("DELETE FROM auth_otps WHERE identifier = :ident AND purpose = :purpose"),
+                {"ident": ident, "purpose": purpose},
             )
-            if sent:
-                delivered_via = "whatsapp"
+            await db.execute(
+                text("""
+                    INSERT INTO auth_otps (id, identifier, purpose, code_hash, attempts, expires_at, created_at)
+                    VALUES (:id, :ident, :purpose, :ch, 0, :exp, :now)
+                """),
+                {
+                    "id": uuid.uuid4(),
+                    "ident": ident,
+                    "purpose": purpose,
+                    "ch": _hash_code(ident, code),
+                    "exp": exp,
+                    "now": now,
+                },
+            )
+            await db.commit()
         except Exception as exc:
-            logger.warning("otp_whatsapp_send_failed", error=str(exc))
+            if not stored_redis:
+                logger.warning("otp_pg_store_failed", error=str(exc))
 
-    logger.info("auth.otp_requested", phone=phone, delivered_via=delivered_via)
+
+async def request_signup_otp(db: AsyncSession, email: str, business_name: str = "BookBot") -> dict:
+    """Generate and email a 6-digit verification OTP before workspace signup."""
+    ident = email.lower().strip()
+    code = generate_otp()
+    await _store_otp(db, ident, code, purpose="signup")
+
+    delivered_via = await _send_email_otp(ident, code, business_name=business_name, purpose="signup")
+    if not delivered_via:
+        delivered_via = "log"
+
+    logger.info("auth.signup_otp_requested", email=ident, delivered_via=delivered_via)
 
     resp: dict = {
-        "found": True,
-        "active": True,
+        "sent": delivered_via != "log" or settings.environment == "development",
+        "otp_required": is_email_otp_configured(),
         "expires_in": OTP_TTL_SECONDS,
         "delivered_via": delivered_via,
     }
@@ -90,47 +188,161 @@ async def request_otp(db: AsyncSession, phone: str) -> dict:
     return resp
 
 
-async def verify_otp(phone: str, otp: str) -> tuple[bool, str]:
-    """Verify a 6-digit OTP for a phone number.
+async def request_otp(db: AsyncSession, identifier: str) -> dict:
+    """Generate and deliver a 6-digit login OTP for an existing owner account (phone OR email)."""
+    ident = identifier.strip()
+    is_email = "@" in ident
 
-    Returns (is_valid, error_message).
-    - In production: strictly checks against the stored Redis OTP with attempt throttling.
-    - In development: verifies against stored Redis OTP if one was requested; if no OTP
-      was requested, allows any valid 6-digit code for fast local dev & tests.
-    """
+    if is_email:
+        result = await db.execute(
+            text(
+                "SELECT id, business_name, owner_phone, owner_email, waba_phone_number_id, is_active "
+                "FROM tenants WHERE LOWER(owner_email) = LOWER(:ident) LIMIT 1"
+            ),
+            {"ident": ident},
+        )
+    else:
+        result = await db.execute(
+            text(
+                "SELECT id, business_name, owner_phone, owner_email, waba_phone_number_id, is_active "
+                "FROM tenants WHERE owner_phone = :ident LIMIT 1"
+            ),
+            {"ident": ident},
+        )
+
+    tenant = result.first()
+    if not tenant:
+        return {"found": False, "active": False}
+    if not tenant.is_active:
+        return {"found": True, "active": False}
+
+    code = generate_otp()
+    # Store under the requested identifier AND canonical owner_phone/owner_email
+    await _store_otp(db, ident, code, purpose="login")
+    if tenant.owner_phone and tenant.owner_phone != ident:
+        await _store_otp(db, tenant.owner_phone, code, purpose="login")
+    if tenant.owner_email and tenant.owner_email.lower() != ident.lower():
+        await _store_otp(db, tenant.owner_email, code, purpose="login")
+
+    delivered_via = "log"
+
+    # Prefer Email delivery when email is available and Resend/SMTP is configured (100% free!)
+    target_email = tenant.owner_email or (ident if is_email else None)
+    if target_email and is_email_otp_configured():
+        email_chan = await _send_email_otp(target_email, code, business_name=tenant.business_name, purpose="login")
+        if email_chan:
+            delivered_via = email_chan
+
+    # Also deliver via WhatsApp if tenant has WABA connected
+    if tenant.waba_phone_number_id and tenant.owner_phone:
+        try:
+            from app.messaging.whatsapp.client import send_text_message
+
+            sent = await send_text_message(
+                phone_number_id=tenant.waba_phone_number_id,
+                to=tenant.owner_phone.lstrip("+"),
+                text=(
+                    f"🔐 Your BookBot login code for *{tenant.business_name}* is *{code}*.\n"
+                    f"Valid for 5 minutes. Do not share this code."
+                ),
+                tenant_id=str(tenant.id),
+            )
+            if sent and delivered_via == "log":
+                delivered_via = "whatsapp"
+        except Exception as exc:
+            logger.warning("otp_whatsapp_send_failed", error=str(exc))
+
+    logger.info("auth.otp_requested", identifier=ident, delivered_via=delivered_via)
+
+    resp: dict = {
+        "found": True,
+        "active": True,
+        "expires_in": OTP_TTL_SECONDS,
+        "delivered_via": delivered_via,
+        "email_configured": is_email_otp_configured(),
+    }
+    if settings.environment == "development":
+        resp["dev_otp"] = code
+    return resp
+
+
+async def verify_otp(
+    identifier: str,
+    otp: str,
+    db: AsyncSession | None = None,
+    purpose: str = "login",
+) -> tuple[bool, str]:
+    """Verify a 6-digit OTP via Redis first, with automatic PostgreSQL fallback."""
     if not otp.isdigit() or len(otp) != 6:
         return False, "OTP must be exactly 6 digits"
 
+    ident = identifier.lower().strip()
+
+    # 1. Try Redis first
+    redis_checked = False
     try:
         r = await get_redis()
-        attempts = int(await r.get(_attempts_key(phone)) or 0)
+        attempts = int(await r.get(_attempts_key(ident, purpose)) or 0)
         if attempts >= OTP_MAX_ATTEMPTS:
             return False, "Too many failed OTP attempts. Please request a new code."
 
-        stored = await r.get(_otp_key(phone))
+        stored = await r.get(_otp_key(ident, purpose))
+        if stored is None and purpose == "login":
+            stored = await r.get(f"auth:otp:{ident}")
+        redis_checked = True
+
+        if stored is not None:
+            if hmac.compare_digest(stored, otp):
+                try:
+                    await r.delete(_otp_key(ident, purpose), _attempts_key(ident, purpose))
+                    if purpose == "login":
+                        await r.delete(f"auth:otp:{ident}", f"auth:otp_attempts:{ident}")
+                except Exception:
+                    pass
+                return True, ""
+            new_attempts = await r.incr(_attempts_key(ident, purpose))
+            if new_attempts == 1:
+                await r.expire(_attempts_key(ident, purpose), OTP_TTL_SECONDS)
+            return False, "Invalid OTP code"
     except Exception as exc:
-        logger.warning("otp_verify_redis_unavailable", error=str(exc))
-        if settings.environment == "development":
-            return True, ""
-        return False, "OTP verification service temporarily unavailable"
+        logger.debug("otp_verify_redis_unavailable", error=str(exc))
 
-    if stored is None:
-        if settings.environment == "development":
-            # Allow direct 6-digit dev login when OTP wasn't explicitly requested
-            return True, ""
-        return False, "OTP expired or not requested. Please request a new code."
-
-    if hmac.compare_digest(stored, otp):
+    # 2. Fallback to Postgres `auth_otps` (works on Vercel Serverless without Redis!)
+    if db is not None:
         try:
-            await r.delete(_otp_key(phone), _attempts_key(phone))
-        except Exception:
-            pass
-        return True, ""
+            row = (
+                await db.execute(
+                    text("""
+                        SELECT id, code_hash, attempts, expires_at
+                        FROM auth_otps
+                        WHERE identifier = :ident AND purpose = :purpose
+                        ORDER BY created_at DESC
+                        LIMIT 1
+                    """),
+                    {"ident": ident, "purpose": purpose},
+                )
+            ).first()
+            if row is not None:
+                now = datetime.now(timezone.utc)
+                if row.attempts >= OTP_MAX_ATTEMPTS:
+                    return False, "Too many failed OTP attempts. Please request a new code."
+                if row.expires_at <= now:
+                    return False, "OTP expired. Please request a new code."
+                if hmac.compare_digest(row.code_hash, _hash_code(ident, otp)):
+                    await db.execute(text("DELETE FROM auth_otps WHERE id = :id"), {"id": row.id})
+                    await db.commit()
+                    return True, ""
+                await db.execute(
+                    text("UPDATE auth_otps SET attempts = attempts + 1 WHERE id = :id"),
+                    {"id": row.id},
+                )
+                await db.commit()
+                return False, "Invalid OTP code"
+        except Exception as exc:
+            logger.warning("otp_pg_verify_failed", error=str(exc))
 
-    try:
-        new_attempts = await r.incr(_attempts_key(phone))
-        if new_attempts == 1:
-            await r.expire(_attempts_key(phone), OTP_TTL_SECONDS)
-    except Exception:
-        pass
-    return False, "Invalid OTP code"
+    if settings.environment == "development":
+        return True, ""
+    if not redis_checked and db is None:
+        return False, "OTP verification service temporarily unavailable"
+    return False, "OTP expired or not requested. Please request a new code."

@@ -62,6 +62,7 @@ class TenantProfile(BaseModel):
     business_type: str
     owner_phone: str
     owner_name: str | None = None
+    owner_email: str | None = None
     slug: str | None = None
     primary_language: str
     timezone: str
@@ -77,6 +78,7 @@ class TenantUpdate(BaseModel):
     business_name: str | None = None
     business_type: str | None = None
     owner_name: str | None = None
+    owner_email: str | None = None
     primary_language: str | None = None
     timezone: str | None = None
     onboarded_at: str | None = None
@@ -122,6 +124,7 @@ class ServiceUpdate(BaseModel):
     name: str | None = None
     description: str | None = None
     image_url: str | None = None
+    parent_service_id: str | None = None
     duration_minutes: int | None = Field(None, ge=0)
     buffer_minutes: int | None = Field(None, ge=0)
     price_paise: int | None = None
@@ -202,12 +205,19 @@ class BranchUpdate(BaseModel):
 
 
 class OtpRequest(BaseModel):
-    phone: str = Field(..., description="Owner phone number (E.164)")
+    phone: str | None = Field(None, description="Owner phone number (E.164)")
+    identifier: str | None = Field(None, description="Owner email or phone number")
+
+
+class SignupOtpRequest(BaseModel):
+    email: str = Field(..., min_length=5, max_length=160)
+    business_name: str | None = "BookBot"
 
 
 class PlanUpdateRequest(BaseModel):
     plan_tier: str = Field(..., description="solo, growth, or pro")
     billing_cycle: str = Field("monthly", description="monthly or annual")
+    skip_trial: bool = Field(False, description="Skip remaining free trial and activate paid billing immediately")
 
 
 class ApplyTemplateRequest(BaseModel):
@@ -258,21 +268,64 @@ class SignupRequest(BaseModel):
     business_name: str = Field(..., min_length=2, max_length=100)
     owner_name: str = Field(..., min_length=2, max_length=100)
     owner_phone: str = Field(..., description="Phone in E.164 format")
+    owner_email: str | None = Field(None, max_length=160, description="Owner email for OTP & billing receipts")
     business_type: str = Field("salon")
     slug: str = Field(..., min_length=2, max_length=30, pattern="^[a-z0-9][a-z0-9-]*[a-z0-9]$")
+    plan_tier: str = Field("solo", description="Initial selected plan for 14-day trial: solo, growth, or pro")
+    billing_cycle: str = Field("monthly", description="monthly or annual")
+    otp: str | None = Field(None, description="6-digit signup OTP (required when Email OTP is configured)")
 
 
 class SignupResponse(BaseModel):
     access_token: str
     tenant_id: str
     slug: str
+    plan_tier: str
     dashboard_url: str
     message: str
 
 
+@router.post("/auth/request-signup-otp")
+async def request_signup_verification_otp(body: SignupOtpRequest, db: AsyncSession = Depends(get_db)):
+    """Send a free 6-digit email verification code before workspace signup."""
+    from app.auth.otp import request_signup_otp
+
+    email = body.email.strip().lower()
+    if "@" not in email or "." not in email.split("@")[-1]:
+        raise HTTPException(status_code=400, detail="Please enter a valid email address")
+
+    existing_email = await db.execute(
+        text("SELECT id FROM tenants WHERE LOWER(owner_email) = LOWER(:email) LIMIT 1"),
+        {"email": email},
+    )
+    if existing_email.first():
+        raise HTTPException(status_code=409, detail="An account with this email already exists. Please sign in.")
+
+    return await request_signup_otp(db, email, business_name=body.business_name or "BookBot")
+
+
 @router.post("/auth/signup", response_model=SignupResponse, status_code=201)
 async def signup(body: SignupRequest, db: AsyncSession = Depends(get_db)):
-    """Self-service tenant registration. Creates tenant + branch + settings + owner staff."""
+    """Self-service tenant registration. Creates tenant + branch + settings + owner staff + 14-day trial."""
+    from app.auth.otp import is_email_otp_configured, verify_otp
+    from app.billing.service import PLANS, ensure_trial_subscription
+    from app.config import settings as app_settings
+
+    plan_tier = body.plan_tier if body.plan_tier in PLANS else "solo"
+    billing_cycle = body.billing_cycle if body.billing_cycle in ("monthly", "annual") else "monthly"
+    clean_email = body.owner_email.strip().lower() if body.owner_email and body.owner_email.strip() else None
+
+    if clean_email and ("@" not in clean_email or "." not in clean_email.split("@")[-1]):
+        raise HTTPException(status_code=400, detail="Please enter a valid email address")
+
+    # Enforce signup email OTP automatically when Resend/SMTP is configured in production
+    if clean_email and is_email_otp_configured() and app_settings.environment == "production":
+        if not body.otp:
+            raise HTTPException(status_code=400, detail="Please verify the 6-digit OTP sent to your email first.")
+        ok, err = await verify_otp(clean_email, body.otp, db=db, purpose="signup")
+        if not ok:
+            raise HTTPException(status_code=401, detail=err)
+
     # Check slug uniqueness
     existing = await db.execute(text("SELECT id FROM tenants WHERE slug = :slug"), {"slug": body.slug})
     if existing.first():
@@ -283,6 +336,16 @@ async def signup(body: SignupRequest, db: AsyncSession = Depends(get_db)):
     if existing_phone.first():
         raise HTTPException(409, "An account with this phone number already exists.")
 
+    # Check email uniqueness
+    if clean_email:
+        existing_email = await db.execute(
+            text("SELECT id FROM tenants WHERE LOWER(owner_email) = LOWER(:email)"),
+            {"email": clean_email},
+        )
+        if existing_email.first():
+            raise HTTPException(409, "An account with this email already exists.")
+
+    import json
     import uuid as uuid_mod
     tenant_id = uuid_mod.uuid4()
     branch_id = uuid_mod.uuid4()
@@ -290,17 +353,16 @@ async def signup(body: SignupRequest, db: AsyncSession = Depends(get_db)):
     settings_id = uuid_mod.uuid4()
     now = datetime.now(timezone.utc)
 
-    # Default operating hours
-    import json
     hours = json.dumps({d: [{"open": "09:00", "close": "20:00"}] for d in ["mon", "tue", "wed", "thu", "fri", "sat"]})
 
     # Create tenant
     await db.execute(text("""
-        INSERT INTO tenants (id, business_name, business_type, owner_phone, owner_name, slug,
+        INSERT INTO tenants (id, business_name, business_type, owner_phone, owner_name, owner_email, slug,
             primary_language, timezone, plan_tier, is_active, created_at, updated_at)
-        VALUES (:id, :name, :type, :phone, :owner, :slug, 'en', 'Asia/Kolkata', 'solo', true, :now, :now)
+        VALUES (:id, :name, :type, :phone, :owner, :email, :slug, 'en', 'Asia/Kolkata', :tier, true, :now, :now)
     """), {"id": tenant_id, "name": body.business_name, "type": body.business_type,
-           "phone": body.owner_phone, "owner": body.owner_name, "slug": body.slug, "now": now})
+           "phone": body.owner_phone, "owner": body.owner_name, "email": clean_email,
+           "slug": body.slug, "tier": plan_tier, "now": now})
 
     # Create branch
     await db.execute(text("""
@@ -320,35 +382,38 @@ async def signup(body: SignupRequest, db: AsyncSession = Depends(get_db)):
         VALUES (:id, :tid, :now, :now)
     """), {"id": settings_id, "tid": tenant_id, "now": now})
 
-    # Provision 14-day free trial subscription
-    from app.billing.service import ensure_trial_subscription
-    await ensure_trial_subscription(db, tenant_id, plan_tier="solo")
+    # Provision 14-day free trial on the chosen plan & cycle
+    await ensure_trial_subscription(db, tenant_id, plan_tier=plan_tier, billing_cycle=billing_cycle)
 
     await db.commit()
 
     from app.dashboard.auth import create_access_token
     token = create_access_token(tenant_id, body.owner_phone)
 
-    from app.config import settings as app_settings
     dashboard_url = f"https://{body.slug}.{app_settings.base_domain}/dashboard/"
 
     return SignupResponse(
         access_token=token,
         tenant_id=str(tenant_id),
         slug=body.slug,
+        plan_tier=plan_tier,
         dashboard_url=dashboard_url,
-        message=f"Welcome! {body.business_name} is ready. Complete setup in your dashboard.",
+        message=f"Welcome! {body.business_name} is ready on your 14-day free trial.",
     )
 
 
 @router.post("/auth/request-otp")
 async def request_login_otp(body: OtpRequest, db: AsyncSession = Depends(get_db)):
-    """Generate and deliver a 6-digit login OTP for an existing owner account."""
+    """Generate and deliver a 6-digit login OTP by phone OR email."""
     from app.auth.otp import request_otp
 
-    result = await request_otp(db, body.phone)
+    ident = (body.identifier or body.phone or "").strip()
+    if not ident:
+        raise HTTPException(status_code=400, detail="Enter your phone number or email address")
+
+    result = await request_otp(db, ident)
     if not result["found"]:
-        raise HTTPException(status_code=404, detail="No account found for this phone number")
+        raise HTTPException(status_code=404, detail="No account found for this phone or email")
     if not result["active"]:
         raise HTTPException(status_code=403, detail="Account is deactivated")
 
@@ -356,6 +421,7 @@ async def request_login_otp(body: OtpRequest, db: AsyncSession = Depends(get_db)
         "sent": True,
         "expires_in": result["expires_in"],
         "delivered_via": result["delivered_via"],
+        "email_configured": result.get("email_configured", False),
     }
     if "dev_otp" in result:
         resp["dev_otp"] = result["dev_otp"]
@@ -364,31 +430,38 @@ async def request_login_otp(body: OtpRequest, db: AsyncSession = Depends(get_db)
 
 @router.post("/auth/login", response_model=LoginResponse)
 async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
-    """Authenticate business owner by phone + 6-digit OTP."""
+    """Authenticate business owner by phone or email + 6-digit OTP."""
     from app.auth.otp import verify_otp
 
     if not body.otp.isdigit() or len(body.otp) != 6:
         raise HTTPException(status_code=400, detail="OTP must be exactly 6 digits")
 
-    result = await db.execute(
-        text("SELECT id, business_name, owner_phone, is_active FROM tenants WHERE owner_phone = :phone"),
-        {"phone": body.phone},
-    )
+    ident = body.phone.strip()
+    if "@" in ident:
+        result = await db.execute(
+            text("SELECT id, business_name, owner_phone, is_active FROM tenants WHERE LOWER(owner_email) = LOWER(:ident)"),
+            {"ident": ident},
+        )
+    else:
+        result = await db.execute(
+            text("SELECT id, business_name, owner_phone, is_active FROM tenants WHERE owner_phone = :phone"),
+            {"phone": ident},
+        )
     tenant = result.first()
 
     if not tenant:
-        raise HTTPException(status_code=404, detail="No account found for this phone number")
+        raise HTTPException(status_code=404, detail="No account found for this phone number or email")
 
     row = tenant._mapping
     if not row["is_active"]:
         raise HTTPException(status_code=403, detail="Account is deactivated")
 
-    ok, err = await verify_otp(body.phone, body.otp)
+    ok, err = await verify_otp(ident, body.otp, db=db, purpose="login")
     if not ok:
         raise HTTPException(status_code=401, detail=err)
 
     token = create_access_token(row["id"], row["owner_phone"])
-    log.info("dashboard.login", tenant_id=str(row["id"]), phone=body.phone)
+    log.info("dashboard.login", tenant_id=str(row["id"]), identifier=ident)
 
     return LoginResponse(
         access_token=token,
@@ -695,10 +768,32 @@ async def update_service(
     tenant_id: uuid.UUID = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
+    from app.billing.service import require_active_subscription, require_feature
+    from app.exceptions import FeatureNotAvailableError, SubscriptionExpiredError
+
     sid = _parse_uuid(service_id, "service_id")
     updates = body.model_dump(exclude_unset=True)
     if not updates:
         raise HTTPException(status_code=400, detail="No fields to update")
+
+    try:
+        await require_active_subscription(db, tenant_id)
+        if updates.get("requires_deposit") is True:
+            await require_feature(db, tenant_id, "deposits_enabled")
+    except SubscriptionExpiredError as exc:
+        raise HTTPException(status_code=402, detail=str(exc))
+    except FeatureNotAvailableError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+
+    if "parent_service_id" in updates:
+        raw_pid = updates["parent_service_id"]
+        if raw_pid:
+            parsed_pid = _parse_uuid(raw_pid, "parent_service_id")
+            if parsed_pid == sid:
+                raise HTTPException(status_code=400, detail="Service cannot be its own parent")
+            updates["parent_service_id"] = parsed_pid
+        else:
+            updates["parent_service_id"] = None
 
     set_clauses = ", ".join(f"{k} = :{k}" for k in updates)
     updates["id"] = sid
@@ -1699,7 +1794,7 @@ async def start_billing_checkout(
 
     try:
         return await create_subscription_checkout(
-            db, tenant_id, body.plan_tier, body.billing_cycle
+            db, tenant_id, body.plan_tier, body.billing_cycle, skip_trial=body.skip_trial
         )
     except DowngradeConflictError as exc:
         raise HTTPException(
