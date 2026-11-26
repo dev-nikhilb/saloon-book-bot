@@ -541,13 +541,38 @@ async def confirm_manual_payment(
     await db.commit()
 
     bid_short = str(row.booking_id)[:8]
+    ts_row = (
+        await db.execute(
+            text(
+                "SELECT booking_confirmed_message, google_maps_url, google_review_url "
+                "FROM tenant_settings WHERE tenant_id = :tid LIMIT 1"
+            ),
+            {"tid": tenant_id},
+        )
+    ).first()
+    extras: list[str] = []
+    maps_url = (ts_row.google_maps_url or "").strip() if ts_row else ""
+    review_url = (ts_row.google_review_url or "").strip() if ts_row else ""
+    custom_note = (ts_row.booking_confirmed_message or "").strip() if ts_row else ""
+    if custom_note:
+        extras.append(
+            custom_note.replace("{business_name}", row.business_name or "")
+            .replace("{service_name}", row.service_name or "")
+            .replace("{customer_name}", row.customer_name or "")
+            .replace("{maps_url}", maps_url)
+            .replace("{review_url}", review_url)
+        )
+    if maps_url and maps_url not in "\n".join(extras):
+        extras.append(f"📍 *Location:* {maps_url}")
+    extra_block = ("\n\n" + "\n\n".join(extras)) if extras else ""
+
     await _send_whatsapp_notice(
         db,
         tenant_id,
         row.customer_phone,
         f"✅ *Payment Verified & Booking Confirmed!*\n\n"
         f"• {row.service_name} at *{row.business_name}*\n"
-        f"• Ref: `{bid_short}`\n\nSee you soon! 🙏",
+        f"• Ref: `{bid_short}`{extra_block}\n\nSee you soon! 🙏",
         buttons=[
             {"id": "action_done", "title": "👍 Thanks, All Set"},
             {"id": "action_book", "title": "📅 Book Another"},
@@ -840,13 +865,42 @@ async def _confirm_booking_if_deposit_paid(
     )
     if updated.first():
         logger.info("booking_confirmed_via_payment", booking_id=str(row.booking_id), tenant_id=tenant_id)
+        ts_row = (
+            await db.execute(
+                text(
+                    "SELECT booking_confirmed_message, google_maps_url, google_review_url "
+                    "FROM tenant_settings WHERE tenant_id = :tid LIMIT 1"
+                ),
+                {"tid": tenant_id},
+            )
+        ).first()
+        extras: list[str] = []
+        maps_url = (ts_row.google_maps_url or "").strip() if ts_row else ""
+        review_url = (ts_row.google_review_url or "").strip() if ts_row else ""
+        custom_note = (ts_row.booking_confirmed_message or "").strip() if ts_row else ""
+        if custom_note:
+            extras.append(
+                custom_note.replace("{business_name}", row.business_name or "")
+                .replace("{service_name}", row.service_name or "")
+                .replace("{maps_url}", maps_url)
+                .replace("{review_url}", review_url)
+            )
+        if maps_url and maps_url not in "\n".join(extras):
+            extras.append(f"📍 *Location:* {maps_url}")
+        extra_block = ("\n\n" + "\n\n".join(extras)) if extras else ""
+        bid_short = str(row.booking_id)[:8]
         await _send_whatsapp_notice(
             db,
             tenant_id,
             row.customer_phone,
             f"✅ *Deposit Received & Booking Confirmed!*\n\n"
             f"• {row.service_name} at *{row.business_name}*\n"
-            f"• Ref: `{str(row.booking_id)[:8]}`\n\nSee you soon! 🙏",
+            f"• Ref: `{bid_short}`{extra_block}\n\nSee you soon! 🙏",
+            buttons=[
+                {"id": "action_done", "title": "👍 Thanks, All Set"},
+                {"id": "action_book", "title": "📅 Book Another"},
+                {"id": f"cancel_{bid_short}", "title": "❌ Cancel This"},
+            ],
         )
 
 

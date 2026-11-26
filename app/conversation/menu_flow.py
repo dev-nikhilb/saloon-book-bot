@@ -79,6 +79,8 @@ async def _load_tenant_settings(db: AsyncSession, tenant_id: str) -> dict:
         "max_bookings_per_customer": 5,
         "welcome_message": None,
         "booking_confirmed_message": None,
+        "google_review_url": None,
+        "google_maps_url": None,
         "razorpay_enabled": False,
         "upi_id": None,
         "deposit_mode": "auto",
@@ -89,6 +91,7 @@ async def _load_tenant_settings(db: AsyncSession, tenant_id: str) -> dict:
             text(
                 "SELECT advance_booking_days, min_cancel_hours, slot_increment_minutes, "
                 "max_bookings_per_customer, welcome_message, booking_confirmed_message, "
+                "google_review_url, google_maps_url, "
                 "razorpay_enabled, upi_id, deposit_mode, deposit_hold_minutes "
                 "FROM tenant_settings WHERE tenant_id = :tid LIMIT 1"
             ),
@@ -1070,8 +1073,24 @@ async def _handle_confirmation(
             footer=f"Slot held for {hold_mins} mins pending deposit.",
         )
 
-    custom_confirm = tsettings.get("booking_confirmed_message")
-    footer_note = f"\n\n{custom_confirm}" if custom_confirm else ""
+    custom_confirm = (tsettings.get("booking_confirmed_message") or "").strip()
+    maps_url = (tsettings.get("google_maps_url") or "").strip()
+    review_url = (tsettings.get("google_review_url") or "").strip()
+    extras: list[str] = []
+    if custom_confirm:
+        formatted = (
+            custom_confirm.replace("{business_name}", business_name or "")
+            .replace("{service_name}", state.selected_service_name or "")
+            .replace("{staff_name}", state.selected_staff_name or "")
+            .replace("{date}", display_date)
+            .replace("{time}", display_time)
+            .replace("{maps_url}", maps_url)
+            .replace("{review_url}", review_url)
+        )
+        extras.append(formatted)
+    if maps_url and maps_url not in "\n".join(extras):
+        extras.append(f"📍 *Location:* {maps_url}")
+    footer_note = ("\n\n" + "\n\n".join(extras)) if extras else ""
     headline = f"🔄 *{labels['booking']} rescheduled!*" if is_reschedule else f"🎉 *{labels['booking']} confirmed!*"
 
     return ButtonResponse(

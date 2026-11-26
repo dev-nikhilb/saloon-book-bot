@@ -2698,7 +2698,7 @@ async function renderSettings() {
         </div>
 
         <div class="card">
-          <h3 class="t-heading" style="margin:0 0 1rem">Automation &amp; Reviews</h3>
+          <h3 class="t-heading" style="margin:0 0 1rem">WhatsApp Messages, Location &amp; Reviews</h3>
           <form id="set-notif" style="display:flex;flex-direction:column;gap:0.8rem">
             <div style="display:flex;justify-content:space-between;align-items:center">
               <div><div class="t-body" style="font-weight:600">WhatsApp Reminders</div><div class="t-caption">Send before appointment</div></div>
@@ -2709,12 +2709,25 @@ async function renderSettings() {
               <label class="apple-switch"><input type="checkbox" name="send_feedback_request" ${s.send_feedback_request !== false ? 'checked' : ''}><span class="apple-switch-track"><span class="apple-switch-thumb"></span></span></label>
             </div>
             <div>
+              <label class="field-label">Welcome Greeting (when customer texts "Hi")</label>
+              <input name="welcome_message" class="input" placeholder="e.g. Welcome to Glow Studio! Tap below to book." value="${escHtml(s.welcome_message || '')}">
+            </div>
+            <div>
+              <label class="field-label">Booking Confirmation Note (shown on every confirmed appointment)</label>
+              <textarea name="booking_confirmed_message" class="textarea" rows="2" placeholder="e.g. Please arrive 10 mins early. Free parking behind the building!">${escHtml(s.booking_confirmed_message || '')}</textarea>
+              <div class="t-caption" style="margin-top:3px">Optional placeholders: <code>{service_name}</code>, <code>{staff_name}</code>, <code>{date}</code>, <code>{time}</code>, <code>{maps_url}</code>, <code>{review_url}</code></div>
+            </div>
+            <div>
+              <label class="field-label">Google Maps Location Link (auto-appended to Confirmation)</label>
+              <input name="google_maps_url" class="input" placeholder="https://maps.app.goo.gl/..." value="${escHtml(s.google_maps_url || '')}">
+            </div>
+            <div>
               <label class="field-label">Custom Thank-You Message (₹0 within 24h window)</label>
-              <textarea name="thank_you_message" class="textarea" rows="3" placeholder="Thank you for visiting *{business_name}*, {customer_name}! 🙏 We hope you loved your *{service_name}*.">${escHtml(s.thank_you_message || '')}</textarea>
+              <textarea name="thank_you_message" class="textarea" rows="2" placeholder="Thank you for visiting *{business_name}*, {customer_name}! 🙏 We hope you loved your *{service_name}*.">${escHtml(s.thank_you_message || '')}</textarea>
               <div class="t-caption" style="margin-top:3px">Placeholders: <code>{customer_name}</code>, <code>{service_name}</code>, <code>{business_name}</code>. Never sends paid templates after 24h.</div>
             </div>
             <div><label class="field-label">Google Review Link (auto-appended to Thank-You)</label><input name="google_review_url" class="input" placeholder="https://g.page/r/..." value="${escHtml(s.google_review_url || '')}"></div>
-            <div><button type="button" class="btn btn-primary btn-sm" onclick="saveNotif()">Save Automation</button></div>
+            <div><button type="button" class="btn btn-primary btn-sm" onclick="saveNotif()">Save Messages &amp; Links</button></div>
           </form>
         </div>
       </div>
@@ -3083,10 +3096,13 @@ async function saveNotif() {
     state.tenantSettings = await apiPut('/tenant/settings', {
       send_reminders: !!form.querySelector('[name=send_reminders]').checked,
       send_feedback_request: !!form.querySelector('[name=send_feedback_request]').checked,
+      welcome_message: (fd.get('welcome_message') || '').trim() || null,
+      booking_confirmed_message: (fd.get('booking_confirmed_message') || '').trim() || null,
+      google_maps_url: (fd.get('google_maps_url') || '').trim() || null,
       thank_you_message: (fd.get('thank_you_message') || '').trim() || null,
       google_review_url: (fd.get('google_review_url') || '').trim() || null
     });
-    toast('Automation & Thank-You message saved');
+    toast('WhatsApp messages & links saved');
   } catch (e) {}
 }
 

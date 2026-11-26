@@ -140,6 +140,7 @@ class TenantSettings(Base):
     booking_confirmed_message: Mapped[str | None] = mapped_column(Text)
     thank_you_message: Mapped[str | None] = mapped_column(Text)
     google_review_url: Mapped[str | None] = mapped_column(Text)
+    google_maps_url: Mapped[str | None] = mapped_column(Text)
 
     # Integrations & Deposit Collection
     google_calendar_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")

@@ -99,6 +99,7 @@ class TenantSettingsUpdate(BaseModel):
     booking_confirmed_message: str | None = None
     thank_you_message: str | None = None
     google_review_url: str | None = None
+    google_maps_url: str | None = None
     google_calendar_enabled: bool | None = None
     razorpay_enabled: bool | None = None
     upi_id: str | None = None

@@ -1034,7 +1034,13 @@ async def test_deposit_upi_owner_alert_dashboard_utr_and_confirm_whatsapp(db):
     client.put(
         "/api/tenant/settings",
         headers=headers,
-        json={"deposit_mode": "upi_manual", "upi_id": "velvetsalon@okicici", "deposit_hold_minutes": 20},
+        json={
+            "deposit_mode": "upi_manual",
+            "upi_id": "velvetsalon@okicici",
+            "deposit_hold_minutes": 20,
+            "booking_confirmed_message": "Arrive 10 mins early for {service_name}!",
+            "google_maps_url": "https://maps.app.goo.gl/velvet-salon",
+        },
     )
     client.post(
         "/api/services",
@@ -1105,6 +1111,8 @@ async def test_deposit_upi_owner_alert_dashboard_utr_and_confirm_whatsapp(db):
         assert conf.json()["status"] == "confirmed"
         mock_cust_msg.assert_called_once()
         assert "Payment Verified & Booking Confirmed" in mock_cust_msg.call_args.kwargs["body"]
+        assert "Arrive 10 mins early for Bridal Styling!" in mock_cust_msg.call_args.kwargs["body"]
+        assert "https://maps.app.goo.gl/velvet-salon" in mock_cust_msg.call_args.kwargs["body"]
         cust_btn_ids = [b.id for b in mock_cust_msg.call_args.kwargs["buttons"]]
         assert "action_done" in cust_btn_ids
 
