@@ -548,6 +548,11 @@ async def confirm_manual_payment(
         f"✅ *Payment Verified & Booking Confirmed!*\n\n"
         f"• {row.service_name} at *{row.business_name}*\n"
         f"• Ref: `{bid_short}`\n\nSee you soon! 🙏",
+        buttons=[
+            {"id": "action_done", "title": "👍 Thanks, All Set"},
+            {"id": "action_book", "title": "📅 Book Another"},
+            {"id": f"cancel_{bid_short}", "title": "❌ Cancel This"},
+        ],
     )
 
     return {

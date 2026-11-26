@@ -130,8 +130,24 @@ async def handle_customer_message(
         await clear_state(tenant_id, customer_phone)
         return TextResponse(t("human_handoff", lang=lang) if lang != "en" else "🙋 I've notified the business owner. They'll get back to you shortly.")
 
+    if lower == "action_done":
+        await clear_state(tenant_id, customer_phone)
+        return TextResponse(
+            f"You're welcome! 🙏 Looking forward to seeing you at *{business_name}*. "
+            "Send *Hi* anytime if you need anything else!"
+        )
+
     state = await get_state(tenant_id, customer_phone)
     tsettings = await _load_tenant_settings(db, tenant_id)
+
+    if state.step == ConversationStep.IDLE and lower in (
+        "thanks", "thank you", "thankyou", "thx", "ty", "ok thanks",
+        "done", "all set", "nothing", "nothing more", "that's all", "thats all", "bye", "goodbye",
+    ):
+        return TextResponse(
+            f"You're welcome! 🙏 Looking forward to seeing you at *{business_name}*. "
+            "Send *Hi* anytime if you need anything else!"
+        )
 
     # Global action button intercepts (work even after state was cleared)
     if lower.startswith("cancel_"):
@@ -1068,7 +1084,8 @@ async def _handle_confirmation(
             f"🆔 {bid}{footer_note}"
         ),
         buttons=[
-            {"id": "action_book", "title": f"{labels['booking_emoji']} {labels['service_action']} Another"},
+            {"id": "action_done", "title": "👍 Thanks, All Set"},
+            {"id": "action_book", "title": f"{labels['booking_emoji']} {labels['service_action']} Another"[:20]},
             {"id": f"cancel_{bid}", "title": "❌ Cancel This"},
         ],
         footer="See you then! 🙏",

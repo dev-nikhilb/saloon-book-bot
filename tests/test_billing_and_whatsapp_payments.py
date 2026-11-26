@@ -1094,9 +1094,9 @@ async def test_deposit_upi_owner_alert_dashboard_utr_and_confirm_whatsapp(db):
     bk_detail = client.get(f"/api/bookings/{bk_list[0]['id']}", headers=headers).json()
     assert bk_detail["utr_reference"] == "837373838291"
 
-    # 4. Approving via Dashboard Confirm button MUST notify customer on WhatsApp!
+    # 4. Approving via Dashboard Confirm button MUST notify customer on WhatsApp with closing buttons!
     with patch(
-        "app.messaging.whatsapp.client.send_text_message",
+        "app.messaging.whatsapp.client.send_reply_buttons",
         new_callable=AsyncMock,
         return_value={"messages": [{"id": "wamid.cust"}]},
     ) as mock_cust_msg:
@@ -1104,7 +1104,14 @@ async def test_deposit_upi_owner_alert_dashboard_utr_and_confirm_whatsapp(db):
         assert conf.status_code == 200
         assert conf.json()["status"] == "confirmed"
         mock_cust_msg.assert_called_once()
-        assert "Payment Verified & Booking Confirmed" in mock_cust_msg.call_args.kwargs["text_body"]
+        assert "Payment Verified & Booking Confirmed" in mock_cust_msg.call_args.kwargs["body"]
+        cust_btn_ids = [b.id for b in mock_cust_msg.call_args.kwargs["buttons"]]
+        assert "action_done" in cust_btn_ids
+
+    # 5. Customer tapping "👍 Thanks, All Set" closes the conversation warmly without restarting booking menu
+    r_done = client.post("/api/simulator/message", headers=headers, json={"mode": "customer", "body": "action_done"}).json()
+    assert r_done["type"] == "text"
+    assert "welcome" in r_done["body"].lower()
 
 
 
