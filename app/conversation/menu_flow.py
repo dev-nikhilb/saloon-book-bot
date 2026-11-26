@@ -251,10 +251,16 @@ async def handle_customer_message(
         return await _handle_service_selection(db, state, tenant_id, customer_phone, body, tz_name, business_type, tsettings)
 
     elif state.step == ConversationStep.AWAITING_SUBCATEGORY:
-        return await _handle_subcategory_selection(db, state, tenant_id, customer_phone, body, tz_name, tsettings)
+        return await _handle_subcategory_selection(db, state, tenant_id, customer_phone, body, tz_name, business_type, tsettings)
+
+    elif state.step == ConversationStep.AWAITING_STAFF:
+        return await _handle_staff_selection(db, state, tenant_id, customer_phone, body, tz_name, business_type, tsettings)
 
     elif state.step == ConversationStep.AWAITING_DATE:
         return await _handle_date_selection(db, state, tenant_id, customer_phone, body, tz_name, tsettings)
+
+    elif state.step == ConversationStep.AWAITING_PERIOD:
+        return await _handle_period_selection(db, state, tenant_id, customer_phone, body, tz_name)
 
     elif state.step == ConversationStep.AWAITING_SLOT:
         return await _handle_slot_selection(db, state, tenant_id, customer_phone, body, business_type)
@@ -312,7 +318,9 @@ async def _try_nlu_shortcut(db, tenant_id, customer_id, customer_phone, body, tz
                 "duration": matched.duration_minutes,
                 "price": matched.price_paise,
             }
-            return await _proceed_to_dates(db, state, tenant_id, customer_phone, selected, tz_name, tsettings)
+            return await _proceed_after_service(
+        db, state, tenant_id, customer_phone, selected, tz_name, business_type, tsettings
+    )
     return None
 
 
@@ -404,18 +412,136 @@ async def _show_main_menu(
     )
 
 
+async def _proceed_after_service(
+    db, state, tenant_id, customer_phone, selected, tz_name, business_type="salon", tsettings=None
+):
+    """If 2+ eligible staff can perform this service, ask the customer to pick a staff member (or Any Available).
+    If only 1 staff is eligible, skip directly to date selection."""
+    res = await db.execute(
+        text("""
+            SELECT id, name, role, specialty, bio
+            FROM staff
+            WHERE tenant_id = :tid AND is_active = true
+              AND (skills IS NULL OR skills @> :skill_filter)
+            ORDER BY name
+        """),
+        {"tid": tenant_id, "skill_filter": f'["{selected["id"]}"]'},
+    )
+    staff_rows = res.fetchall()
+
+    if len(staff_rows) <= 1:
+        state.preferred_staff_id = str(staff_rows[0].id) if len(staff_rows) == 1 else ""
+        state.preferred_staff_name = staff_rows[0].name if len(staff_rows) == 1 else ""
+        state.staff_options_json = "[]"
+        return await _proceed_to_dates(db, state, tenant_id, customer_phone, selected, tz_name, tsettings)
+
+    labels = get_labels(business_type)
+    staff_label = labels["staff"]
+    options = [
+        {
+            "id": str(s.id),
+            "name": s.name,
+            "role": s.role or "",
+            "specialty": s.specialty or "",
+            "bio": s.bio or "",
+        }
+        for s in staff_rows[:9]  # +1 row for "Any Available" = max 10 WhatsApp list rows
+    ]
+    state.step = ConversationStep.AWAITING_STAFF
+    state.selected_service_id = selected["id"]
+    state.selected_service_name = selected["name"]
+    state.preferred_staff_id = ""
+    state.preferred_staff_name = ""
+    state.staff_options_json = json.dumps(options)
+    await set_state(tenant_id, customer_phone, state)
+
+    rows = [
+        {
+            "id": "staff_any",
+            "title": f"Any Available {staff_label}"[:24],
+            "description": "Fastest available slot",
+        }
+    ]
+    for i, s in enumerate(options):
+        desc = s["specialty"] or s["role"] or s["bio"] or ""
+        rows.append({
+            "id": f"staff_{i}",
+            "title": s["name"][:24],
+            "description": desc[:72],
+        })
+
+    return ListResponse(
+        body=f"👤 *{selected['name']}*\n\nWho would you prefer?",
+        button_text=f"Choose {staff_label}"[:20],
+        sections=[{"title": f"Available {labels.get('staff_plural', 'Team')}"[:24], "rows": rows}],
+    )
+
+
+async def _handle_staff_selection(
+    db, state, tenant_id, customer_phone, body, tz_name, business_type="salon", tsettings=None
+):
+    """Handle staff preference selection (specific staff member or Any Available)."""
+    options = json.loads(state.staff_options_json or "[]")
+    lower = body.strip().lower()
+
+    chosen_id = None
+    chosen_name = ""
+
+    if lower in ("staff_any", "any", "anyone", "any available", "0"):
+        chosen_id = ""
+        chosen_name = ""
+    elif lower.startswith("staff_"):
+        try:
+            idx = int(lower.replace("staff_", ""))
+            if 0 <= idx < len(options):
+                chosen_id = options[idx]["id"]
+                chosen_name = options[idx]["name"]
+        except ValueError:
+            pass
+    else:
+        # Match by number (1 = Any Available, 2..N = specific staff) or staff name
+        try:
+            num = int(lower)
+            if num == 1:
+                chosen_id = ""
+                chosen_name = ""
+            elif 2 <= num <= len(options) + 1:
+                chosen_id = options[num - 2]["id"]
+                chosen_name = options[num - 2]["name"]
+        except ValueError:
+            for s in options:
+                if s["id"] == body.strip() or s["name"].lower() == lower or lower in s["name"].lower():
+                    chosen_id = s["id"]
+                    chosen_name = s["name"]
+                    break
+
+    if chosen_id is None:
+        labels = get_labels(business_type)
+        menu_lines = [f"  1. Any Available {labels['staff']}"] + [
+            f"  {i + 2}. {s['name']}" for i, s in enumerate(options)
+        ]
+        return TextResponse(f"Please choose a {labels['staff'].lower()}:\n" + "\n".join(menu_lines))
+
+    state.preferred_staff_id = chosen_id
+    state.preferred_staff_name = chosen_name
+    selected = {"id": state.selected_service_id, "name": state.selected_service_name}
+    return await _proceed_to_dates(db, state, tenant_id, customer_phone, selected, tz_name, tsettings)
+
+
 async def _proceed_to_dates(db, state, tenant_id, customer_phone, selected, tz_name, tsettings):
-    """Find available dates honoring tenant advance_booking_days and transition to AWAITING_DATE."""
+    """Find available dates honoring tenant advance_booking_days and preferred staff, then transition to AWAITING_DATE."""
     tz = zoneinfo.ZoneInfo(tz_name)
     today = datetime.now(tz).date()
     max_days = max(1, min(90, int((tsettings or {}).get("advance_booking_days", 14))))
     slot_inc = int((tsettings or {}).get("slot_increment_minutes", 15))
+    pref_staff = UUID(state.preferred_staff_id) if state.preferred_staff_id else None
 
     available_dates = []
     for i in range(max_days):
         d = today + timedelta(days=i)
         slots = await get_available_slots(
-            db, UUID(tenant_id), UUID(selected["id"]), d, tz_name=tz_name, slot_increment=slot_inc
+            db, UUID(tenant_id), UUID(selected["id"]), d,
+            preferred_staff_id=pref_staff, tz_name=tz_name, slot_increment=slot_inc,
         )
         if slots:
             available_dates.append(d)
@@ -424,7 +550,8 @@ async def _proceed_to_dates(db, state, tenant_id, customer_phone, selected, tz_n
 
     if not available_dates:
         await clear_state(tenant_id, customer_phone)
-        return TextResponse(f"Sorry, no slots available for {selected['name']} in the next {max_days} days.")
+        who = f" with {state.preferred_staff_name}" if state.preferred_staff_name else ""
+        return TextResponse(f"Sorry, no slots available for {selected['name']}{who} in the next {max_days} days.")
 
     state.step = ConversationStep.AWAITING_DATE
     state.selected_service_id = selected["id"]
@@ -442,8 +569,9 @@ async def _proceed_to_dates(db, state, tenant_id, customer_phone, selected, tz_n
     ]
 
     prefix = "🔄 Rescheduling " if state.booking_id_to_cancel else "📅 "
+    with_who = f" with *{state.preferred_staff_name}*" if state.preferred_staff_name else ""
     return ListResponse(
-        body=f"{prefix}*{selected['name']}*\n\nPick a date:",
+        body=f"{prefix}*{selected['name']}*{with_who}\n\nPick a date:",
         button_text="View Dates",
         sections=[{"title": "Available Dates", "rows": rows}],
     )
@@ -491,13 +619,82 @@ async def _handle_service_selection(db, state, tenant_id, customer_phone, body, 
     if selected.get("child_count", 0) > 0:
         return await _show_subcategory_list(db, state, tenant_id, customer_phone, selected)
 
-    return await _proceed_to_dates(db, state, tenant_id, customer_phone, selected, tz_name, tsettings)
+    return await _proceed_after_service(
+        db, state, tenant_id, customer_phone, selected, tz_name, business_type, tsettings
+    )
+
+
+def _slot_hour(slot_dict: dict, tz_name: str) -> int:
+    dt = datetime.fromisoformat(slot_dict["start"])
+    try:
+        dt = dt.astimezone(zoneinfo.ZoneInfo(tz_name))
+    except Exception:
+        pass
+    return dt.hour
+
+
+def _render_slot_page(
+    state: ConversationState,
+    slots_data: list[dict],
+    page: int = 0,
+    period_label: str = "",
+) -> ListResponse:
+    """Render up to 10 WhatsApp list rows for slots, with Earlier/More pagination if >10 slots."""
+    selected_date = date.fromisoformat(state.selected_date)
+    date_label = selected_date.strftime("%A, %d %b")
+    with_who = f" with *{state.preferred_staff_name}*" if state.preferred_staff_name else ""
+    period_suffix = f" ({period_label})" if period_label else ""
+
+    if len(slots_data) <= 10:
+        page_items = [(i, s) for i, s in enumerate(slots_data)]
+        has_prev = False
+        has_next = False
+    else:
+        page_size = 8
+        max_page = max(0, (len(slots_data) - 1) // page_size)
+        page = max(0, min(page, max_page))
+        start_idx = page * page_size
+        end_idx = min(len(slots_data), start_idx + page_size)
+        page_items = [(i, slots_data[i]) for i in range(start_idx, end_idx)]
+        has_prev = page > 0
+        has_next = end_idx < len(slots_data)
+
+    rows = []
+    if has_prev:
+        rows.append({
+            "id": f"slot_page_{page - 1}",
+            "title": "⬅️ Earlier times",
+            "description": "See previous available slots",
+        })
+    for idx, s in page_items:
+        desc = ""
+        if not state.preferred_staff_id and s.get("staff_name"):
+            desc = f"with {s['staff_name']}"
+        rows.append({
+            "id": f"slot_{idx}",
+            "title": str(s.get("display", ""))[:24],
+            "description": desc[:72],
+        })
+    if has_next:
+        remaining = len(slots_data) - (page + 1) * 8
+        rows.append({
+            "id": f"slot_page_{page + 1}",
+            "title": "➡️ More times",
+            "description": f"{remaining} more slot{'s' if remaining != 1 else ''} later",
+        })
+
+    return ListResponse(
+        body=f"⏰ *{state.selected_service_name}*{with_who} on *{date_label}*{period_suffix}\n\nPick a time:",
+        button_text="View Times",
+        sections=[{"title": f"Available Slots{period_suffix}"[:24], "rows": rows}],
+    )
 
 
 async def _handle_date_selection(db, state, tenant_id, customer_phone, body, tz_name, tsettings=None):
-    """Handle date selection."""
+    """Handle date selection, deduplicating times and grouping full-day slots by Morning/Afternoon/Evening."""
     dates = json.loads(state.available_slots_json)
     slot_inc = int((tsettings or {}).get("slot_increment_minutes", 15))
+    pref_staff = UUID(state.preferred_staff_id) if state.preferred_staff_id else None
 
     idx = None
     if body.startswith("date_"):
@@ -522,65 +719,96 @@ async def _handle_date_selection(db, state, tenant_id, customer_phone, body, tz_
     selected_date = date.fromisoformat(dates[idx])
     slots = await get_available_slots(
         db, UUID(tenant_id), UUID(state.selected_service_id), selected_date,
-        tz_name=tz_name, slot_increment=slot_inc,
+        preferred_staff_id=pref_staff, tz_name=tz_name, slot_increment=slot_inc,
     )
 
     if not slots:
         return TextResponse(f"No slots on {selected_date.strftime('%A, %d %b')}. Pick another date.")
 
-    unique_staff = {s.staff_id for s in slots}
-    is_solo = len(unique_staff) == 1
+    # Always deduplicate by start time so identical times never appear twice across multiple staff
+    seen: set[str] = set()
+    dedup_slots = []
+    for s in slots:
+        key = s.start.strftime("%H:%M")
+        if key not in seen:
+            seen.add(key)
+            dedup_slots.append(s)
 
-    if is_solo:
-        seen = {}
-        display_slots = []
-        for s in slots:
-            key = s.start.strftime("%H:%M")
-            if key not in seen:
-                seen[key] = True
-                display_slots.append(s)
-            if len(display_slots) >= 10:
-                break
-    else:
-        display_slots = slots[:10]
-
-    slots_data = [s.to_dict() for s in display_slots]
-    state.step = ConversationStep.AWAITING_SLOT
+    slots_data = [s.to_dict() for s in dedup_slots]
     state.selected_date = selected_date.isoformat()
     state.available_slots_json = json.dumps(slots_data)
+    state.slot_page = 0
+
+    # If >10 slots across multiple parts of the day, offer fast Morning/Afternoon/Evening buttons
+    if len(slots_data) > 10:
+        morning = [s for s in slots_data if _slot_hour(s, tz_name) < 12]
+        afternoon = [s for s in slots_data if 12 <= _slot_hour(s, tz_name) < 17]
+        evening = [s for s in slots_data if _slot_hour(s, tz_name) >= 17]
+        buttons = []
+        if morning:
+            buttons.append({"id": "period_morning", "title": f"🌅 Morning ({len(morning)})"[:20]})
+        if afternoon:
+            buttons.append({"id": "period_afternoon", "title": f"☀️ Afternoon ({len(afternoon)})"[:20]})
+        if evening:
+            buttons.append({"id": "period_evening", "title": f"🌆 Evening ({len(evening)})"[:20]})
+
+        if len(buttons) >= 2:
+            state.step = ConversationStep.AWAITING_PERIOD
+            await set_state(tenant_id, customer_phone, state)
+            with_who = f" with *{state.preferred_staff_name}*" if state.preferred_staff_name else ""
+            return ButtonResponse(
+                body=(
+                    f"⏰ *{state.selected_service_name}*{with_who} on *{selected_date.strftime('%A, %d %b')}*\n\n"
+                    "Which part of the day works best?"
+                ),
+                buttons=buttons,
+            )
+
+    state.step = ConversationStep.AWAITING_SLOT
     await set_state(tenant_id, customer_phone, state)
+    return _render_slot_page(state, slots_data, page=0)
 
-    rows = []
-    for i, s in enumerate(display_slots):
-        time_str = s.start.strftime("%I:%M %p").lstrip("0")
-        if is_solo:
-            rows.append({
-                "id": f"slot_{i}",
-                "title": time_str[:24],
-                "description": "",
-            })
-        else:
-            desc = f"with {s.staff_name}"
-            bio = s.to_dict().get("staff_specialty") or s.to_dict().get("staff_bio")
-            if bio:
-                desc += f" · {bio}"
-            rows.append({
-                "id": f"slot_{i}",
-                "title": f"{time_str} — {s.staff_name}"[:24],
-                "description": desc[:72],
-            })
 
-    return ListResponse(
-        body=f"⏰ *{state.selected_service_name}* on *{selected_date.strftime('%A, %d %b')}*\n\nPick a time:",
-        button_text="View Times",
-        sections=[{"title": "Available Slots", "rows": rows}],
-    )
+async def _handle_period_selection(db, state, tenant_id, customer_phone, body, tz_name):
+    """Filter full-day slots by Morning / Afternoon / Evening and show selectable times."""
+    all_slots = json.loads(state.available_slots_json or "[]")
+    lower = body.strip().lower()
+
+    if lower in ("period_morning", "morning", "1"):
+        filtered = [s for s in all_slots if _slot_hour(s, tz_name) < 12]
+        label = "Morning"
+    elif lower in ("period_afternoon", "afternoon", "2"):
+        filtered = [s for s in all_slots if 12 <= _slot_hour(s, tz_name) < 17]
+        label = "Afternoon"
+    elif lower in ("period_evening", "evening", "3"):
+        filtered = [s for s in all_slots if _slot_hour(s, tz_name) >= 17]
+        label = "Evening"
+    else:
+        return TextResponse("Please pick *Morning*, *Afternoon*, or *Evening*.")
+
+    if not filtered:
+        return TextResponse(f"No {label.lower()} slots available on that date. Please pick another time of day.")
+
+    state.step = ConversationStep.AWAITING_SLOT
+    state.available_slots_json = json.dumps(filtered)
+    state.slot_page = 0
+    await set_state(tenant_id, customer_phone, state)
+    return _render_slot_page(state, filtered, page=0, period_label=label)
 
 
 async def _handle_slot_selection(db, state, tenant_id, customer_phone, body, business_type="salon"):
-    """Handle slot selection."""
+    """Handle slot selection (or Earlier/More pagination)."""
     labels = get_labels(business_type)
     slots = json.loads(state.available_slots_json)
+
+    if body.startswith("slot_page_"):
+        try:
+            next_page = int(body.replace("slot_page_", ""))
+            state.slot_page = max(0, next_page)
+            await set_state(tenant_id, customer_phone, state)
+            return _render_slot_page(state, slots, page=state.slot_page)
+        except ValueError:
+            pass
 
     idx = None
     if body.startswith("slot_"):
@@ -614,9 +842,8 @@ async def _handle_slot_selection(db, state, tenant_id, customer_phone, body, bus
     display_time = selected["display"]
     display_date = date.fromisoformat(state.selected_date).strftime("%A, %d %b")
 
-    all_cached = json.loads(state.available_slots_json)
-    unique_staff_in_slots = {s["staff_id"] for s in all_cached}
-    is_solo = len(unique_staff_in_slots) == 1
+    has_multiple_staff = bool(json.loads(state.staff_options_json or "[]"))
+    show_staff = has_multiple_staff or bool(state.preferred_staff_name) or len({s["staff_id"] for s in slots}) > 1
 
     header = "🔄 *Confirm rescheduled" if state.booking_id_to_cancel else "✅ *Confirm your"
     body_lines = [
@@ -625,7 +852,7 @@ async def _handle_slot_selection(db, state, tenant_id, customer_phone, body, bus
         f"{labels['booking_emoji']} {display_date}",
         f"⏰ {display_time}",
     ]
-    if not is_solo:
+    if show_staff and selected.get("staff_name"):
         body_lines.append(f"👤 {selected['staff_name']}")
         bio = selected.get("staff_specialty") or selected.get("staff_bio")
         if bio:
@@ -1046,7 +1273,9 @@ async def _show_subcategory_list(db, state, tenant_id, customer_phone, parent):
     )
 
 
-async def _handle_subcategory_selection(db, state, tenant_id, customer_phone, body, tz_name, tsettings=None):
+async def _handle_subcategory_selection(
+    db, state, tenant_id, customer_phone, body, tz_name, business_type="salon", tsettings=None
+):
     """Handle child service selection from a parent category."""
     services = json.loads(state.services_json)
 
@@ -1079,7 +1308,9 @@ async def _handle_subcategory_selection(db, state, tenant_id, customer_phone, bo
             f"\U0001f4c2 *{state.selected_parent_name}*\n\nPick a service:\n{menu}\n\nReply with a number."
         )
 
-    return await _proceed_to_dates(db, state, tenant_id, customer_phone, selected, tz_name, tsettings)
+    return await _proceed_after_service(
+        db, state, tenant_id, customer_phone, selected, tz_name, business_type, tsettings
+    )
 
 
 async def _handle_utr_submission(

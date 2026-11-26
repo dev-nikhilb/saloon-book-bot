@@ -23,7 +23,9 @@ class ConversationStep(str, Enum):
     IDLE = "idle"
     AWAITING_SERVICE = "awaiting_service"
     AWAITING_SUBCATEGORY = "awaiting_subcategory"
+    AWAITING_STAFF = "awaiting_staff"
     AWAITING_DATE = "awaiting_date"
+    AWAITING_PERIOD = "awaiting_period"
     AWAITING_SLOT = "awaiting_slot"
     AWAITING_CONFIRM = "awaiting_confirm"
     AWAITING_CANCEL_CONFIRM = "awaiting_cancel_confirm"
@@ -41,12 +43,16 @@ class ConversationState:
     selected_slot_index: int = -1
     selected_staff_id: str = ""
     selected_staff_name: str = ""
+    preferred_staff_id: str = ""
+    preferred_staff_name: str = ""
     selected_start: str = ""  # ISO datetime
     selected_end: str = ""  # ISO datetime
     selected_parent_id: str = ""
     selected_parent_name: str = ""
     booking_id_to_cancel: str = ""
     pending_payment_booking_id: str = ""
+    slot_page: int = 0
+    staff_options_json: str = "[]"
     available_slots_json: str = "[]"  # cached slots for display
     services_json: str = "[]"  # cached services for display
 
@@ -55,7 +61,9 @@ class ConversationState:
 
     @classmethod
     def from_json(cls, data: str) -> ConversationState:
-        return cls(**json.loads(data))
+        raw = json.loads(data)
+        valid_fields = cls.__dataclass_fields__.keys()
+        return cls(**{k: v for k, v in raw.items() if k in valid_fields})
 
 
 def _key(tenant_id: str, customer_phone: str) -> str:

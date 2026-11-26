@@ -676,3 +676,106 @@ async def test_solo_trial_enforces_solo_branch_and_feature_limits(db):
     br_ok = client.post("/api/branches", headers=headers, json={"name": "Indiranagar"})
     assert br_ok.status_code == 201
 
+
+@pytest.mark.asyncio
+async def test_whatsapp_multi_staff_picker_and_full_day_slots(db):
+    """With 2+ staff, WhatsApp asks who the customer prefers, never duplicates time slots, and offers Morning/Afternoon/Evening for full-day browsing."""
+    client = TestClient(app)
+    uid = str(uuid.uuid4())[:8]
+    resp = client.post(
+        "/api/auth/signup",
+        json={
+            "business_name": "Duo Style Salon",
+            "owner_name": "Nikhil",
+            "owner_phone": f"+9194{str(uuid.uuid4().int)[:8]}",
+            "business_type": "salon",
+            "slug": f"duo-{uid}",
+            "plan_tier": "solo",
+        },
+    )
+    assert resp.status_code == 201
+    headers = {"Authorization": f"Bearer {resp.json()['access_token']}"}
+
+    # Add a 2nd staff member (Nikhil is already created as owner staff)
+    st2 = client.post("/api/staff", headers=headers, json={"name": "Priya", "role": "Senior Stylist"})
+    assert st2.status_code == 201
+
+    # Add a 45-min Haircut service with 45-min slot interval (14 slots across 9 AM - 8 PM)
+    svc = client.post(
+        "/api/services",
+        headers=headers,
+        json={"name": "Haircut", "duration_minutes": 45, "slot_increment_minutes": 45, "price_paise": 50000},
+    )
+    assert svc.status_code == 201
+
+    # 1. Customer says Hi -> Services list
+    r1 = client.post("/api/simulator/message", headers=headers, json={"mode": "customer", "body": "hi"})
+    assert r1.status_code == 200
+    d1 = r1.json()
+    assert d1["type"] == "list"
+
+    # 2. Pick Haircut -> MUST ask which Stylist (Any Available + Nikhil + Priya)
+    r2 = client.post(
+        "/api/simulator/message",
+        headers=headers,
+        json={"mode": "customer", "body": "svc_0", "conv_state": d1["conv_state"]},
+    )
+    assert r2.status_code == 200
+    d2 = r2.json()
+    assert d2["type"] == "list"
+    staff_titles = [r["title"] for r in d2["sections"][0]["rows"]]
+    assert any("Any Available" in t for t in staff_titles)
+    assert "Nikhil" in staff_titles
+    assert "Priya" in staff_titles
+
+    # 3. Pick Priya specifically -> Dates list mentioning Priya
+    priya_row = next(r for r in d2["sections"][0]["rows"] if r["title"] == "Priya")
+    r3 = client.post(
+        "/api/simulator/message",
+        headers=headers,
+        json={"mode": "customer", "body": priya_row["id"], "conv_state": d2["conv_state"]},
+    )
+    assert r3.status_code == 200
+    d3 = r3.json()
+    assert d3["type"] == "list"
+    assert "Priya" in d3["body"]
+
+    # 4. Pick a full future date (index 1 = tomorrow or next open day) -> Morning/Afternoon/Evening buttons
+    date_id = d3["sections"][0]["rows"][-1]["id"]
+    r4 = client.post(
+        "/api/simulator/message",
+        headers=headers,
+        json={"mode": "customer", "body": date_id, "conv_state": d3["conv_state"]},
+    )
+    assert r4.status_code == 200
+    d4 = r4.json()
+    assert d4["type"] == "buttons"
+    btn_ids = [b["id"] for b in d4["buttons"]]
+    assert "period_morning" in btn_ids
+    assert "period_evening" in btn_ids
+
+    # 5. Pick Evening -> Clean deduplicated evening slots at 45-min intervals
+    r5 = client.post(
+        "/api/simulator/message",
+        headers=headers,
+        json={"mode": "customer", "body": "period_evening", "conv_state": d4["conv_state"]},
+    )
+    assert r5.status_code == 200
+    d5 = r5.json()
+    assert d5["type"] == "list"
+    slot_titles = [r["title"] for r in d5["sections"][0]["rows"]]
+    assert len(slot_titles) == len(set(slot_titles))  # zero duplicate times!
+    assert all("PM" in t for t in slot_titles)
+
+    # 6. Pick first evening slot -> Confirmation shows Priya!
+    r6 = client.post(
+        "/api/simulator/message",
+        headers=headers,
+        json={"mode": "customer", "body": d5["sections"][0]["rows"][0]["id"], "conv_state": d5["conv_state"]},
+    )
+    assert r6.status_code == 200
+    d6 = r6.json()
+    assert d6["type"] == "buttons"
+    assert "Priya" in d6["body"]
+
+

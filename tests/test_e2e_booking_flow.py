@@ -99,11 +99,19 @@ class TestE2EBookingFlow:
         service_id = seed["service_ids"][0]
         r3 = simulate(client, cust_phone, service_id, seed["owner_phone"])
         assert r3["received"]
+        # Demo tenant has 2 staff -> asks who you prefer before showing dates
+        if "who would you prefer" in r3["message"].lower():
+            r3 = simulate(client, cust_phone, "staff_any", seed["owner_phone"])
+            assert r3["received"]
         assert "pick a date" in r3["message"].lower()
 
         # Step 4: Select a date
         r4 = simulate(client, cust_phone, "action_date_0", seed["owner_phone"])
         assert r4["received"]
+        # Full-day schedules with >10 slots offer Morning/Afternoon/Evening filter first
+        if "part of the day" in r4["message"].lower():
+            r4 = simulate(client, cust_phone, "period_morning", seed["owner_phone"])
+            assert r4["received"]
         assert "pick a time" in r4["message"].lower()
 
         # Step 5: Select a time slot

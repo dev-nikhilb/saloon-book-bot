@@ -29,7 +29,7 @@ class TestConversationStepEnum:
         assert ConversationStep.AWAITING_CANCEL_CONFIRM == "awaiting_cancel_confirm"
 
     def test_all_steps_count(self):
-        assert len(ConversationStep) == 8
+        assert len(ConversationStep) == 10
 
     def test_is_str_enum(self):
         assert isinstance(ConversationStep.IDLE, str)
@@ -139,9 +139,11 @@ class TestConversationStateSerialization:
         expected_keys = {
             "step", "tenant_id", "customer_id", "selected_service_id",
             "selected_service_name", "selected_date", "selected_slot_index",
-            "selected_staff_id", "selected_staff_name", "selected_start",
+            "selected_staff_id", "selected_staff_name",
+            "preferred_staff_id", "preferred_staff_name", "selected_start",
             "selected_end", "selected_parent_id", "selected_parent_name",
             "booking_id_to_cancel", "pending_payment_booking_id",
+            "slot_page", "staff_options_json",
             "available_slots_json", "services_json",
         }
         assert set(parsed.keys()) == expected_keys
