@@ -695,6 +695,10 @@ html[data-theme="dark"] .apple-toast { background: rgba(58, 58, 60, 0.92); }
         <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.604.852.997 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
         <span>Settings</span>
       </a>
+      <button type="button" class="nav-item" style="width:100%;border:none;background:transparent;cursor:pointer;text-align:left" onclick="openSupportModal('WhatsApp Setup Assistance')">
+        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        <span>Help &amp; Setup Support</span>
+      </button>
     </nav>
 
     <div class="sidebar-footer">
@@ -1051,9 +1055,12 @@ function closeSheet(releaseVelocity = 0) {
    ORIGIN-ANCHORED MATERIALIZING MODAL (§7, §12)
    ========================================================================== */
 const modalSpring = new FluidSpring(0, { dampingRatio: 0.94, response: 0.32 });
+let modalIsOpen = false;
 function openModal(title, bodyHtml, footerHtml = '', opts = {}) {
   const overlay = document.getElementById('modal-overlay');
   const card = document.getElementById('modal-card');
+  modalIsOpen = true;
+  modalSpring.stop();
   document.getElementById('modal-title').textContent = title;
   document.getElementById('modal-body').innerHTML = bodyHtml;
   const foot = document.getElementById('modal-footer');
@@ -1068,18 +1075,20 @@ function openModal(title, bodyHtml, footerHtml = '', opts = {}) {
   modalSpring.set(0);
   modalSpring.to(1, {
     dampingRatio: 0.92,
-    response: 0.32,
+    response: 0.30,
     onUpdate: (v) => {
       const s = 0.94 + 0.06 * v;
       const y = (1 - v) * 14;
       card.style.transform = `translate3d(0, ${y}px, 0) scale(${s})`;
       card.style.opacity = String(Math.min(1, v * 1.25));
     },
+    onRest: null,
   });
 }
 function closeModal() {
   const overlay = document.getElementById('modal-overlay');
   const card = document.getElementById('modal-card');
+  modalIsOpen = false;
   modalSpring.to(0, {
     dampingRatio: 1.0,
     response: 0.22,
@@ -1089,8 +1098,10 @@ function closeModal() {
       card.style.opacity = String(v);
     },
     onRest: () => {
-      overlay.classList.remove('open');
-      document.getElementById('modal-body').innerHTML = '';
+      if (!modalIsOpen) {
+        overlay.classList.remove('open');
+        document.getElementById('modal-body').innerHTML = '';
+      }
     },
   });
 }
@@ -2514,18 +2525,61 @@ async function renderSettings() {
         </div>
       </div>
 
-      <!-- WhatsApp Cloud API -->
+      <!-- WhatsApp Cloud API + Step-by-Step Self-Serve Guide + Support Concierge -->
       <div class="card">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.85rem">
-          <h3 class="t-heading" style="margin:0">WhatsApp Business Connection</h3>
-          <span class="pill ${t.waba_phone_number_id ? 'pill-confirmed' : 'pill-no_show'}">${t.waba_phone_number_id ? 'Connected' : 'Not Connected'}</span>
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.5rem;margin-bottom:0.85rem">
+          <div style="display:flex;align-items:center;gap:0.6rem">
+            <h3 class="t-heading" style="margin:0">WhatsApp Business Connection</h3>
+            <span class="pill ${t.waba_phone_number_id ? 'pill-confirmed' : 'pill-no_show'}">${t.waba_phone_number_id ? 'Connected' : 'Not Connected'}</span>
+          </div>
+          <div style="display:flex;gap:0.45rem;flex-wrap:wrap">
+            <button type="button" class="btn btn-soft-blue btn-sm" onclick="toggleWaGuide()">📖 Step-by-Step Guide</button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="openSupportModal('WhatsApp WABA Setup Help')">💬 Request Free Setup Help</button>
+          </div>
         </div>
+
+        <!-- Copy-ready Webhook Credentials -->
+        <div id="wa-webhook-box" style="display:grid;grid-template-columns:1fr 1fr;gap:0.65rem;padding:0.85rem;border-radius:12px;background:var(--surface-secondary);margin-bottom:0.95rem">
+          <div style="min-width:0">
+            <div class="t-micro">1. Meta Webhook Callback URL</div>
+            <div style="display:flex;align-items:center;gap:0.4rem;margin-top:4px">
+              <code id="wa-cb-url" class="t-mono" style="font-size:0.76rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">${escHtml(window.location.origin)}/webhooks/whatsapp</code>
+              <button type="button" class="btn btn-secondary btn-sm" style="padding:3px 9px;font-size:0.72rem" onclick="copyTextById('wa-cb-url','Webhook URL copied')">Copy</button>
+            </div>
+          </div>
+          <div style="min-width:0">
+            <div class="t-micro">2. Meta Verify Token</div>
+            <div style="display:flex;align-items:center;gap:0.4rem;margin-top:4px">
+              <code id="wa-verify-tok" class="t-mono" style="font-size:0.76rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1">Loading…</code>
+              <button type="button" class="btn btn-secondary btn-sm" style="padding:3px 9px;font-size:0.72rem" onclick="copyTextById('wa-verify-tok','Verify Token copied')">Copy</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Step-by-Step Visual Walkthrough (auto-expanded when not connected) -->
+        <div id="wa-setup-guide" class="${t.waba_phone_number_id ? 'hidden' : ''}" style="padding:1rem;border-radius:14px;background:var(--blue-soft);border:0.5px solid rgba(0,122,255,0.22);margin-bottom:1rem">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.65rem">
+            <strong style="font-size:0.88rem;color:var(--blue)">How to Connect Your WhatsApp Business Number (5 Mins)</strong>
+            <a href="/docs.html" target="_blank" style="font-size:0.76rem;color:var(--blue);font-weight:600">Full Docs ↗</a>
+          </div>
+          <ol style="margin:0;padding-left:1.2rem;display:flex;flex-direction:column;gap:0.55rem;font-size:0.82rem;line-height:1.48;color:var(--label)">
+            <li><strong>Create a free Meta App:</strong> Open <a href="https://developers.facebook.com/apps" target="_blank" style="color:var(--blue);font-weight:600">developers.facebook.com/apps ↗</a> → click <strong>Create App</strong> → select <strong>Other → Business</strong> → add the <strong>WhatsApp</strong> product.</li>
+            <li><strong>Copy your WABA Phone Number ID:</strong> In the left menu open <strong>WhatsApp → API Setup</strong>. Select your phone number under <em>From</em> and copy the 15-digit <strong>Phone Number ID</strong> → paste it in the field below.</li>
+            <li><strong>Generate a Permanent Access Token:</strong> Open <a href="https://business.facebook.com/settings/system-users" target="_blank" style="color:var(--blue);font-weight:600">Meta Business Settings → System Users ↗</a> → create an <strong>Admin</strong> user → click <strong>Generate New Token</strong> → pick your app with <code>whatsapp_business_messaging</code> &amp; <code>whatsapp_business_management</code> → paste below (Fernet encrypted).</li>
+            <li><strong>Place the Webhook URL in Meta:</strong> Back in your Meta App go to <strong>WhatsApp → Configuration</strong> → click <strong>Edit</strong> next to Webhook → paste the <strong>Callback URL</strong> &amp; <strong>Verify Token</strong> from the box above → click <strong>Verify and Save</strong> → click <strong>Manage</strong> and toggle ON <code>messages</code>.</li>
+            <li><strong>Save &amp; Test:</strong> Click <strong>Save WhatsApp Credentials</strong> below and send <code>Hi</code> to your business number from another phone!</li>
+          </ol>
+          <div style="margin-top:0.8rem;padding-top:0.7rem;border-top:0.5px solid rgba(0,122,255,0.2);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.5rem">
+            <span class="t-caption" style="color:var(--label)">Find Meta setup tricky? Our team does it with you free on a 10-min screen share.</span>
+            <button type="button" class="btn btn-primary btn-sm" onclick="openSupportModal('Assisted Meta WhatsApp Setup')">Book Free Guided Setup</button>
+          </div>
+        </div>
+
         <form id="set-wa" style="display:flex;flex-direction:column;gap:0.85rem">
           <div class="grid-2">
             <div><label class="field-label">WABA Phone Number ID</label><input name="waba_phone_number_id" class="input t-mono" value="${escHtml(t.waba_phone_number_id || '')}" placeholder="100234567890123"></div>
             <div><label class="field-label">Permanent Access Token (Fernet Encrypted)</label><input name="waba_access_token" type="password" class="input t-mono" placeholder="${t.waba_phone_number_id ? '••••••••••••' : 'Paste Meta System User token'}"></div>
           </div>
-          <div class="t-caption">Webhook URL: <code class="t-mono">${escHtml(window.location.origin)}/webhooks/whatsapp</code></div>
           <div><button type="button" class="btn btn-primary btn-sm" onclick="saveWhatsApp()">Save WhatsApp Credentials</button></div>
         </form>
       </div>
@@ -2598,6 +2652,73 @@ async function renderSettings() {
     </div>`;
 
   loadBillingBox();
+  loadWaSetupInfo();
+}
+
+async function loadWaSetupInfo() {
+  try {
+    const info = await apiGet('/tenant/whatsapp-setup-info');
+    const urlEl = document.getElementById('wa-cb-url');
+    const tokEl = document.getElementById('wa-verify-tok');
+    if (urlEl && info.webhook_url) urlEl.textContent = info.webhook_url;
+    if (tokEl && info.verify_token) tokEl.textContent = info.verify_token;
+  } catch (e) {}
+}
+
+function toggleWaGuide() {
+  document.getElementById('wa-setup-guide')?.classList.toggle('hidden');
+}
+
+function copyTextById(id, okMsg = 'Copied!') {
+  const txt = document.getElementById(id)?.textContent?.trim();
+  if (!txt) return;
+  navigator.clipboard.writeText(txt).then(() => toast(okMsg)).catch(() => toast(txt, 'info'));
+}
+
+function openSupportModal(defaultTopic = 'WhatsApp Setup Help') {
+  const t = state.tenant || {};
+  openModal('Customer Support & Free Assisted Setup', `
+    <div style="display:flex;flex-direction:column;gap:0.9rem">
+      <div style="padding:0.85rem 1rem;border-radius:12px;background:var(--green-soft);color:var(--green-text);font-size:0.83rem;line-height:1.45">
+        <strong>Done-For-You Onboarding (Free):</strong> Need help fetching your Meta WABA Phone Number ID, placing the Webhook URL, or setting up Razorpay/UPI deposits? Submit a request below and our team will walk you through it on a quick 10-min call.
+      </div>
+      <form id="support-form" style="display:flex;flex-direction:column;gap:0.8rem">
+        <div>
+          <label class="field-label">How can we help?</label>
+          <select name="topic" class="select">
+            <option value="Assisted Meta WhatsApp Setup" ${defaultTopic.includes('WhatsApp') ? 'selected' : ''}>Connect WhatsApp Business API (WABA &amp; Webhook)</option>
+            <option value="Deposits & Razorpay / UPI Setup">Setup WhatsApp Booking Deposits (Razorpay / UPI)</option>
+            <option value="Services, Staff & Hours Migration">Import Services &amp; Team Schedule</option>
+            <option value="Billing & Plan Question">Billing, Trial or Plan Question</option>
+            <option value="Technical Issue">Report a Bug / Technical Issue</option>
+          </select>
+        </div>
+        <div class="grid-2">
+          <div><label class="field-label">Best WhatsApp / Call Number</label><input name="contact_phone" class="input" value="${escHtml(t.owner_phone || '')}" placeholder="+91 98765 43210"></div>
+          <div><label class="field-label">Preferred Time</label><input name="preferred_time" class="input" placeholder="e.g. Today 4–6 PM IST"></div>
+        </div>
+        <div><label class="field-label">Notes (optional)</label><textarea name="notes" class="textarea" rows="3" placeholder="Tell us where you're stuck (e.g. Meta Business verification, permanent token, webhook error)…"></textarea></div>
+      </form>
+    </div>
+  `, `
+    <a href="/docs.html" target="_blank" class="btn btn-ghost btn-sm" style="margin-right:auto">Read Docs ↗</a>
+    <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+    <button class="btn btn-primary" onclick="submitSupportRequest()">Request Support</button>
+  `);
+}
+
+async function submitSupportRequest() {
+  const fd = new FormData(document.getElementById('support-form'));
+  try {
+    const res = await apiPost('/support/request', {
+      topic: fd.get('topic'),
+      contact_phone: fd.get('contact_phone') || null,
+      preferred_time: fd.get('preferred_time') || null,
+      notes: fd.get('notes') || null,
+    });
+    toast(res.message || 'Support request submitted!');
+    closeModal();
+  } catch (e) {}
 }
 
 async function saveProfile() {

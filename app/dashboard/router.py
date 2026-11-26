@@ -10,7 +10,7 @@ from datetime import date, datetime, timezone
 from typing import Any
 
 import structlog
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -1898,6 +1898,72 @@ async def update_billing_plan(
         payment_provider="sandbox",
         record_invoice=True,
     )
+
+
+class SupportRequestPayload(BaseModel):
+    topic: str = Field(..., min_length=2, max_length=120)
+    contact_phone: str | None = Field(None, max_length=30)
+    preferred_time: str | None = Field(None, max_length=80)
+    notes: str | None = Field(None, max_length=1000)
+
+
+@router.get("/tenant/whatsapp-setup-info")
+async def get_whatsapp_setup_info(
+    request: Request,
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return exact Webhook Callback URL, Verify Token, and connection status for self-serve Meta setup."""
+    from app.config import settings as app_settings
+
+    row = (
+        await db.execute(
+            text("SELECT business_name, slug, waba_phone_number_id FROM tenants WHERE id = :tid"),
+            {"tid": tenant_id},
+        )
+    ).first()
+    scheme = request.headers.get("x-forwarded-proto") or request.url.scheme or "https"
+    host = request.headers.get("host") or app_settings.base_domain
+    webhook_url = f"{scheme}://{host}/webhooks/whatsapp"
+    return {
+        "webhook_url": webhook_url,
+        "verify_token": app_settings.meta_webhook_verify_token,
+        "is_connected": bool(row and row.waba_phone_number_id),
+        "business_name": row.business_name if row else "",
+        "slug": row.slug if row else "",
+    }
+
+
+@router.post("/support/request", status_code=201)
+async def create_support_request(
+    body: SupportRequestPayload,
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Submit a Done-For-You setup or customer support request."""
+    row = (
+        await db.execute(
+            text("SELECT business_name, owner_name, owner_phone, owner_email, slug FROM tenants WHERE id = :tid"),
+            {"tid": tenant_id},
+        )
+    ).first()
+    ticket_id = f"SUP-{str(uuid.uuid4())[:6].upper()}"
+    log.info(
+        "support.request_created",
+        ticket_id=ticket_id,
+        tenant_id=str(tenant_id),
+        business_name=row.business_name if row else "",
+        owner_phone=body.contact_phone or (row.owner_phone if row else ""),
+        owner_email=row.owner_email if row else "",
+        topic=body.topic,
+        preferred_time=body.preferred_time,
+        notes=body.notes,
+    )
+    return {
+        "ticket_id": ticket_id,
+        "status": "received",
+        "message": f"Support ticket {ticket_id} created! Our team will reach out shortly to assist you.",
+    }
 
 
 # ---------------------------------------------------------------------------
