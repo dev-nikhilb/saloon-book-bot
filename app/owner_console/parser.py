@@ -18,6 +18,10 @@ class OwnerCommand(str, Enum):
     WEEK = "week"
     BOOKINGS = "bookings"
     CANCEL = "cancel"
+    CONFIRM_PAYMENT = "confirm_payment"
+    REJECT_PAYMENT = "reject_payment"
+    PENDING_PAYMENTS = "pending_payments"
+    PLAN = "plan"
     BLOCK = "block"
     UNBLOCK = "unblock"
     STATS = "stats"
@@ -52,6 +56,10 @@ HELP_PATTERNS = re.compile(r"^(help|commands|cmds|menu|\?)", re.I)
 PAUSE_PATTERNS = re.compile(r"^(pause|stop|off|closed)", re.I)
 RESUME_PATTERNS = re.compile(r"^(resume|start|on|open)", re.I)
 BOOKINGS_PATTERNS = re.compile(r"^(bookings?|appointments?|schedule)", re.I)
+CONFIRM_PAY_PATTERNS = re.compile(r"^(confirm|verify|approve|paid)\s+(\S+)", re.I)
+REJECT_PAY_PATTERNS = re.compile(r"^(reject|decline|unpaid)\s+(\S+)", re.I)
+PENDING_PAY_PATTERNS = re.compile(r"^(pending|deposits?|payments?)(\s|$)", re.I)
+PLAN_PATTERNS = re.compile(r"^(plan|billing|subscription|sub|renew)(\s|$)", re.I)
 
 # Time patterns: "4pm", "4:30pm", "16:00", "4-6pm", "4pm-6pm"
 TIME_PATTERN = re.compile(r"(\d{1,2})(?::(\d{2}))?\s*(am|pm)?", re.I)
@@ -88,6 +96,23 @@ def parse_command(text: str, tz_name: str = "Asia/Kolkata") -> ParsedCommand:
     # Stats
     if STATS_PATTERNS.match(text):
         return ParsedCommand(command=OwnerCommand.STATS, raw=raw)
+
+    # Plan / Billing / Renew status
+    if PLAN_PATTERNS.match(text):
+        return ParsedCommand(command=OwnerCommand.PLAN, raw=raw)
+
+    # Pending deposit verifications
+    if PENDING_PAY_PATTERNS.match(text):
+        return ParsedCommand(command=OwnerCommand.PENDING_PAYMENTS, raw=raw)
+
+    # Confirm / Reject deposit payment (e.g. "confirm a1b2c3d4")
+    m_confirm = CONFIRM_PAY_PATTERNS.match(text)
+    if m_confirm:
+        return ParsedCommand(command=OwnerCommand.CONFIRM_PAYMENT, booking_ref=m_confirm.group(2), raw=raw)
+
+    m_reject = REJECT_PAY_PATTERNS.match(text)
+    if m_reject:
+        return ParsedCommand(command=OwnerCommand.REJECT_PAYMENT, booking_ref=m_reject.group(2), raw=raw)
 
     # Today
     if TODAY_PATTERNS.match(text):

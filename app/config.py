@@ -26,10 +26,17 @@ class Settings(BaseSettings):
     google_oauth_client_secret: str = ""
     google_oauth_redirect_uri: str = "http://localhost:8000/auth/google/callback"
 
-    # Razorpay
+    # Razorpay (booking deposits + SaaS subscriptions)
     razorpay_key_id: str = ""
     razorpay_key_secret: str = ""
     razorpay_webhook_secret: str = ""
+    razorpay_plan_solo_monthly: str = ""
+    razorpay_plan_solo_annual: str = ""
+    razorpay_plan_growth_monthly: str = ""
+    razorpay_plan_growth_annual: str = ""
+    razorpay_plan_pro_monthly: str = ""
+    razorpay_plan_pro_annual: str = ""
+    subscription_grace_days: int = 3
 
     # Gemini (conversation AI)
     gemini_api_key: str = ""

@@ -34,6 +34,14 @@ celery.conf.update(
             "task": "rebooking.scan_and_nudge",
             "schedule": 86400.0,  # daily
         },
+        "check-subscription-expiries-hourly": {
+            "task": "billing.check_subscription_expiries",
+            "schedule": 3600.0,  # hourly warnings + grace/expiry transitions
+        },
+        "expire-unpaid-deposits-every-5min": {
+            "task": "payments.expire_unpaid_deposits",
+            "schedule": 300.0,  # every 5 minutes
+        },
     },
 )
 

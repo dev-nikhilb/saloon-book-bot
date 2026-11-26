@@ -24,3 +24,4 @@ htmlcov/
 .agents/
 skills-lock.json
 .vercel
+.env*

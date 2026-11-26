@@ -98,6 +98,9 @@ class TenantSettingsUpdate(BaseModel):
     google_review_url: str | None = None
     google_calendar_enabled: bool | None = None
     razorpay_enabled: bool | None = None
+    upi_id: str | None = None
+    deposit_mode: str | None = None  # auto, razorpay, upi_manual, disabled
+    deposit_hold_minutes: int | None = Field(None, ge=5, le=1440)
 
 
 # -- Service ---------------------------------------------------------------
@@ -492,9 +495,30 @@ async def update_tenant_settings(
     tenant_id: uuid.UUID = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
+    from app.billing.service import require_active_subscription, require_feature
+    from app.exceptions import FeatureNotAvailableError, SubscriptionExpiredError
+
     updates = body.model_dump(exclude_unset=True)
     if not updates:
         raise HTTPException(status_code=400, detail="No fields to update")
+
+    if "deposit_mode" in updates and updates["deposit_mode"] not in ("auto", "razorpay", "upi_manual", "disabled"):
+        raise HTTPException(status_code=400, detail="deposit_mode must be auto, razorpay, upi_manual, or disabled")
+
+    try:
+        await require_active_subscription(db, tenant_id)
+        if updates.get("google_calendar_enabled") is True:
+            await require_feature(db, tenant_id, "google_calendar_enabled")
+        if (
+            updates.get("razorpay_enabled") is True
+            or updates.get("upi_id")
+            or updates.get("deposit_mode") in ("razorpay", "upi_manual")
+        ):
+            await require_feature(db, tenant_id, "deposits_enabled")
+    except SubscriptionExpiredError as exc:
+        raise HTTPException(status_code=402, detail=str(exc))
+    except FeatureNotAvailableError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
 
     # Check if settings row exists
     result = await db.execute(
@@ -572,6 +596,18 @@ async def create_service(
     tenant_id: uuid.UUID = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
+    from app.billing.service import require_active_subscription, require_feature
+    from app.exceptions import FeatureNotAvailableError, SubscriptionExpiredError
+
+    try:
+        await require_active_subscription(db, tenant_id)
+        if body.requires_deposit:
+            await require_feature(db, tenant_id, "deposits_enabled")
+    except SubscriptionExpiredError as exc:
+        raise HTTPException(status_code=402, detail=str(exc))
+    except FeatureNotAvailableError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
+
     service_id = uuid.uuid4()
     parent_id = _parse_uuid(body.parent_service_id, "parent_service_id") if body.parent_service_id else None
 
@@ -738,10 +774,12 @@ async def create_staff(
     db: AsyncSession = Depends(get_db),
 ):
     from app.billing.service import enforce_plan_limit
-    from app.exceptions import PlanLimitExceededError
+    from app.exceptions import PlanLimitExceededError, SubscriptionExpiredError
 
     try:
         await enforce_plan_limit(db, tenant_id, "staff")
+    except SubscriptionExpiredError as exc:
+        raise HTTPException(status_code=402, detail=str(exc))
     except PlanLimitExceededError as exc:
         raise HTTPException(status_code=402, detail=f"Plan limit reached ({exc}). Upgrade your plan to add more team members.")
 
@@ -975,10 +1013,12 @@ async def create_manual_booking(
 
     from app.billing.service import enforce_plan_limit
     from app.bookings.repository import create_booking
-    from app.exceptions import PlanLimitExceededError, SlotConflictError
+    from app.exceptions import PlanLimitExceededError, SlotConflictError, SubscriptionExpiredError
 
     try:
         await enforce_plan_limit(db, tenant_id, "bookings")
+    except SubscriptionExpiredError as exc:
+        raise HTTPException(status_code=402, detail=str(exc))
     except PlanLimitExceededError as exc:
         raise HTTPException(status_code=402, detail=f"Monthly booking limit reached ({exc})")
 
@@ -1485,10 +1525,12 @@ async def create_branch(
 ):
     """Add a new branch/location (enforces plan tier branch limits)."""
     from app.billing.service import enforce_plan_limit
-    from app.exceptions import PlanLimitExceededError
+    from app.exceptions import PlanLimitExceededError, SubscriptionExpiredError
 
     try:
         await enforce_plan_limit(db, tenant_id, "branches")
+    except SubscriptionExpiredError as exc:
+        raise HTTPException(status_code=402, detail=str(exc))
     except PlanLimitExceededError as exc:
         raise HTTPException(status_code=402, detail=f"Plan limit reached ({exc}). Upgrade to add more branches.")
 
@@ -1612,6 +1654,19 @@ async def apply_starter_template(
 # BILLING & PLANS
 # ---------------------------------------------------------------------------
 
+class BillingVerifyRequest(BaseModel):
+    plan_tier: str
+    billing_cycle: str = "monthly"
+    razorpay_payment_id: str
+    razorpay_signature: str
+    razorpay_subscription_id: str | None = None
+    razorpay_order_id: str | None = None
+
+
+class CancelSubscriptionRequest(BaseModel):
+    immediate: bool = False
+
+
 @router.get("/billing/plans")
 async def get_billing_plans():
     """List available SaaS subscription tiers."""
@@ -1624,12 +1679,87 @@ async def get_billing_subscription(
     tenant_id: uuid.UUID = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get tenant's active plan, trial status, limits, and current usage."""
+    """Get tenant's active plan, lifecycle status, warnings, entitlements, and live usage."""
     from app.billing.service import ensure_trial_subscription, get_usage_summary
 
     await ensure_trial_subscription(db, tenant_id)
     await db.commit()
     return await get_usage_summary(db, tenant_id)
+
+
+@router.post("/billing/checkout")
+async def start_billing_checkout(
+    body: PlanUpdateRequest,
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a Razorpay Subscription / Order checkout (or activate immediately in sandbox mode)."""
+    from app.billing.service import create_subscription_checkout
+    from app.exceptions import DowngradeConflictError
+
+    try:
+        return await create_subscription_checkout(
+            db, tenant_id, body.plan_tier, body.billing_cycle
+        )
+    except DowngradeConflictError as exc:
+        raise HTTPException(
+            status_code=409,
+            detail={"message": str(exc), "conflicts": exc.conflicts},
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@router.post("/billing/verify-payment")
+async def verify_billing_payment(
+    body: BillingVerifyRequest,
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Verify Razorpay subscription/order checkout signature and activate plan."""
+    from app.billing.service import verify_subscription_payment
+
+    try:
+        return await verify_subscription_payment(
+            db=db,
+            tenant_id=tenant_id,
+            plan_tier=body.plan_tier,
+            billing_cycle=body.billing_cycle,
+            razorpay_payment_id=body.razorpay_payment_id,
+            razorpay_signature=body.razorpay_signature,
+            razorpay_subscription_id=body.razorpay_subscription_id,
+            razorpay_order_id=body.razorpay_order_id,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@router.post("/billing/cancel")
+async def cancel_billing_subscription(
+    body: CancelSubscriptionRequest | None = None,
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Cancel tenant subscription (defaults to end of current paid period)."""
+    from app.billing.service import cancel_subscription
+
+    try:
+        return await cancel_subscription(
+            db, tenant_id, immediate=(body.immediate if body else False)
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc))
+
+
+@router.get("/billing/invoices")
+async def get_billing_invoices(
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return subscription payment/invoice history for the authenticated tenant."""
+    from app.billing.service import list_invoices
+
+    return await list_invoices(db, tenant_id)
 
 
 @router.put("/billing/plan")
@@ -1638,46 +1768,41 @@ async def update_billing_plan(
     tenant_id: uuid.UUID = Depends(get_current_tenant),
     db: AsyncSession = Depends(get_db),
 ):
-    """Switch tenant subscription tier (solo / growth / pro)."""
-    from datetime import timedelta
-
-    from app.billing.service import PLANS, get_usage_summary
+    """Switch tenant subscription tier (enforces downgrade safety & payment gate in production)."""
+    from app.billing.service import (
+        PLANS,
+        activate_subscription,
+        is_razorpay_configured,
+        validate_plan_change,
+    )
+    from app.config import settings as app_settings
+    from app.exceptions import DowngradeConflictError
 
     if body.plan_tier not in PLANS:
         raise HTTPException(status_code=400, detail=f"Plan must be one of: {', '.join(PLANS.keys())}")
     if body.billing_cycle not in ("monthly", "annual"):
         raise HTTPException(status_code=400, detail="billing_cycle must be 'monthly' or 'annual'")
 
-    now = datetime.now(timezone.utc)
-    period_end = now + timedelta(days=365 if body.billing_cycle == "annual" else 30)
+    try:
+        await validate_plan_change(db, tenant_id, body.plan_tier)
+    except DowngradeConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
 
-    await db.execute(
-        text("UPDATE tenants SET plan_tier = :tier, updated_at = :now WHERE id = :tid"),
-        {"tier": body.plan_tier, "now": now, "tid": tenant_id},
+    # In production with Razorpay configured, require paid checkout via /api/billing/checkout
+    if app_settings.environment == "production" and is_razorpay_configured():
+        raise HTTPException(
+            status_code=402,
+            detail="Complete payment via POST /api/billing/checkout to change your production plan.",
+        )
+
+    return await activate_subscription(
+        db,
+        tenant_id=tenant_id,
+        plan_tier=body.plan_tier,
+        billing_cycle=body.billing_cycle,
+        payment_provider="sandbox",
+        record_invoice=True,
     )
-    existing = (await db.execute(
-        text("SELECT id FROM subscriptions WHERE tenant_id = :tid LIMIT 1"), {"tid": tenant_id}
-    )).first()
-    if existing:
-        await db.execute(
-            text("""
-                UPDATE subscriptions
-                SET plan_tier = :tier, billing_cycle = :cycle, status = 'active',
-                    current_period_start = :start, current_period_end = :end
-                WHERE id = :id
-            """),
-            {"tier": body.plan_tier, "cycle": body.billing_cycle, "start": now, "end": period_end, "id": existing.id},
-        )
-    else:
-        await db.execute(
-            text("""
-                INSERT INTO subscriptions (id, tenant_id, plan_tier, billing_cycle, current_period_start, current_period_end, status)
-                VALUES (:id, :tid, :tier, :cycle, :start, :end, 'active')
-            """),
-            {"id": uuid.uuid4(), "tid": tenant_id, "tier": body.plan_tier, "cycle": body.billing_cycle, "start": now, "end": period_end},
-        )
-    await db.commit()
-    return await get_usage_summary(db, tenant_id)
 
 
 # ---------------------------------------------------------------------------
@@ -1687,9 +1812,19 @@ async def update_billing_plan(
 @router.get("/integrations/google-calendar/auth-url")
 async def get_google_calendar_auth_url(
     tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
 ):
-    """Return Google Calendar OAuth consent URL (or configured=false if keys not set)."""
+    """Return Google Calendar OAuth consent URL (gated by google_calendar_enabled entitlement)."""
+    from app.billing.service import require_feature
     from app.calendar_sync.service import build_oauth_url, is_google_calendar_configured
+    from app.exceptions import FeatureNotAvailableError, SubscriptionExpiredError
+
+    try:
+        await require_feature(db, tenant_id, "google_calendar_enabled")
+    except SubscriptionExpiredError as exc:
+        raise HTTPException(status_code=402, detail=str(exc))
+    except FeatureNotAvailableError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
 
     configured = is_google_calendar_configured()
     url = build_oauth_url(state=str(tenant_id)) if configured else None

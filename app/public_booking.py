@@ -16,12 +16,16 @@ from pydantic import BaseModel, Field
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.billing.service import enforce_plan_limit
+from app.billing.service import enforce_plan_limit, get_subscription_state, require_feature
 from app.bookings.repository import create_booking
 from app.bookings.slots import get_available_slots
-from app.config import settings as app_settings
 from app.database import get_db
-from app.exceptions import PlanLimitExceededError, SlotConflictError
+from app.exceptions import (
+    FeatureNotAvailableError,
+    PlanLimitExceededError,
+    SlotConflictError,
+    SubscriptionExpiredError,
+)
 from app.verticals import get_vertical
 
 logger = structlog.get_logger()
@@ -64,10 +68,20 @@ async def _get_tenant_by_slug(db: AsyncSession, slug: str):
 
 @router.get("/business")
 async def get_business_from_subdomain(request: Request, db: AsyncSession = Depends(get_db)):
-    """Resolve public business profile using subdomain (Host: slug.bookbot.com)."""
+    """Resolve public business profile using subdomain (Host: slug.bookbot.com).
+
+    Custom subdomain branding is a Pro plan entitlement.
+    """
     slug = getattr(request.state, "tenant_slug", None)
     if not slug:
         raise HTTPException(status_code=404, detail="No business subdomain in request")
+    tenant = await _get_tenant_by_slug(db, slug)
+    try:
+        await require_feature(db, tenant.id, "custom_subdomain")
+    except SubscriptionExpiredError as exc:
+        raise HTTPException(status_code=402, detail=str(exc))
+    except FeatureNotAvailableError as exc:
+        raise HTTPException(status_code=403, detail=str(exc))
     return await get_public_business(slug, db)
 
 
@@ -76,12 +90,14 @@ async def get_public_business(slug: str, db: AsyncSession = Depends(get_db)) -> 
     """Public profile, services tree, staff profiles, branches, and booking rules."""
     tenant = await _get_tenant_by_slug(db, slug)
     tid = tenant.id
+    sub_state = await get_subscription_state(db, tid)
 
     # Settings
     ts_res = await db.execute(
         text(
             "SELECT advance_booking_days, min_cancel_hours, slot_increment_minutes, "
-            "welcome_message, booking_confirmed_message, google_review_url, razorpay_enabled "
+            "welcome_message, booking_confirmed_message, google_review_url, razorpay_enabled, "
+            "upi_id, deposit_mode, deposit_hold_minutes "
             "FROM tenant_settings WHERE tenant_id = :tid LIMIT 1"
         ),
         {"tid": tid},
@@ -95,6 +111,9 @@ async def get_public_business(slug: str, db: AsyncSession = Depends(get_db)) -> 
         "booking_confirmed_message": None,
         "google_review_url": None,
         "razorpay_enabled": False,
+        "upi_id": None,
+        "deposit_mode": "auto",
+        "deposit_hold_minutes": 15,
     }
 
     # Branches
@@ -178,6 +197,7 @@ async def get_public_business(slug: str, db: AsyncSession = Depends(get_db)) -> 
         "slug": tenant.slug,
         "timezone": tenant.timezone,
         "primary_language": tenant.primary_language,
+        "booking_paused": sub_state["access_mode"] == "suspended",
         "labels": vertical["labels"],
         "vertical": {
             "display_name": vertical["display_name"],
@@ -243,9 +263,11 @@ async def create_public_booking(
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=f"Invalid input: {exc}")
 
-    # Enforce monthly booking plan limit
+    # Enforce active subscription & monthly booking plan limit
     try:
         await enforce_plan_limit(db, tid, "bookings")
+    except SubscriptionExpiredError as exc:
+        raise HTTPException(status_code=402, detail=str(exc))
     except PlanLimitExceededError as exc:
         raise HTTPException(status_code=402, detail=f"Monthly booking limit reached ({exc})")
 
@@ -361,14 +383,39 @@ async def create_public_booking(
         raise HTTPException(status_code=409, detail=str(exc))
 
     payment_url = None
-    if svc.requires_deposit and svc.deposit_amount_paise and app_settings.razorpay_key_id and app_settings.razorpay_key_secret:
+    payment_method = None
+    upi_id_out = None
+    if svc.requires_deposit and svc.deposit_amount_paise:
         try:
-            from app.payments.router import create_razorpay_order, generate_payment_link
+            sub_st = await get_subscription_state(db, tid)
+            if sub_st["entitlements"].get("deposits_enabled", False):
+                ts_dep = (
+                    await db.execute(
+                        text(
+                            "SELECT deposit_mode, upi_id, deposit_hold_minutes "
+                            "FROM tenant_settings WHERE tenant_id = :tid LIMIT 1"
+                        ),
+                        {"tid": tid},
+                    )
+                ).first()
+                from app.payments.router import create_whatsapp_deposit_payment
 
-            order = await create_razorpay_order(
-                db=db, tenant_id=str(tid), booking_id=booking["id"], amount_paise=svc.deposit_amount_paise
-            )
-            payment_url = generate_payment_link(order["razorpay_order_id"], svc.deposit_amount_paise, tenant.business_name)
+                pay_res = await create_whatsapp_deposit_payment(
+                    db=db,
+                    tenant_id=str(tid),
+                    booking_id=booking["id"],
+                    amount_paise=svc.deposit_amount_paise,
+                    business_name=tenant.business_name,
+                    customer_name=body.customer_name.strip(),
+                    customer_phone=phone,
+                    deposit_mode=(ts_dep.deposit_mode if ts_dep else "auto"),
+                    upi_id=(ts_dep.upi_id if ts_dep else None),
+                    hold_minutes=(ts_dep.deposit_hold_minutes if ts_dep else 15),
+                )
+                if pay_res:
+                    payment_url = pay_res.get("url")
+                    payment_method = pay_res.get("payment_method")
+                    upi_id_out = pay_res.get("upi_id")
         except Exception as exc:
             logger.warning("public_booking_deposit_order_failed", error=str(exc))
 
@@ -380,4 +427,6 @@ async def create_public_booking(
         "requires_deposit": bool(svc.requires_deposit),
         "deposit_amount_paise": svc.deposit_amount_paise,
         "payment_url": payment_url,
+        "payment_method": payment_method,
+        "upi_id": upi_id_out,
     }

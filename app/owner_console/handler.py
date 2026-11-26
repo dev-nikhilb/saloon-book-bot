@@ -9,8 +9,11 @@ import structlog
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.billing.service import enforce_plan_limit, get_subscription_state, get_usage_summary
 from app.bookings.models import BookingStatus
 from app.bookings.repository import get_bookings_for_date, update_booking_status
+from app.config import settings as app_settings
+from app.exceptions import PlanLimitExceededError, SubscriptionExpiredError
 from app.labels import get_labels
 from app.owner_console.parser import OwnerCommand, ParsedCommand, parse_command
 
@@ -25,33 +28,64 @@ async def handle_owner_message(
     tz_name: str = "Asia/Kolkata",
     business_type: str = "salon",
 ) -> str:
-    """Process an owner WhatsApp message and return the reply."""
+    """Process an owner WhatsApp message and return the reply.
+
+    Terminal resilience: owner read/status/billing/verification commands ALWAYS work
+    even if the subscription has expired — with a clear renewal banner attached.
+    """
     parsed = parse_command(body, tz_name)
+    sub_state = await get_subscription_state(db, UUID(tenant_id))
+    renew_url = f"{app_settings.dashboard_url.rstrip('/')}#settings"
+
+    banner = ""
+    if sub_state["access_mode"] == "suspended":
+        banner = (
+            f"🔴 *Subscription Expired* — new customer bookings are paused.\n"
+            f"Renew here: {renew_url}\n\n"
+        )
+    elif sub_state["access_mode"] == "grace_warning":
+        banner = (
+            f"⚠️ *Renewal Overdue* ({sub_state['days_remaining']}d grace left) — renew: {renew_url}\n\n"
+        )
 
     match parsed.command:
         case OwnerCommand.TODAY | OwnerCommand.TOMORROW | OwnerCommand.BOOKINGS:
-            return await _cmd_bookings(db, tenant_id, parsed, tz_name)
+            reply = await _cmd_bookings(db, tenant_id, parsed, tz_name)
         case OwnerCommand.WEEK:
-            return await _cmd_week(db, tenant_id, tz_name, business_type)
+            reply = await _cmd_week(db, tenant_id, tz_name, business_type)
         case OwnerCommand.CANCEL:
-            return await _cmd_cancel(db, tenant_id, parsed)
+            reply = await _cmd_cancel(db, tenant_id, parsed)
+        case OwnerCommand.CONFIRM_PAYMENT:
+            reply = await _cmd_confirm_payment(db, tenant_id, parsed)
+        case OwnerCommand.REJECT_PAYMENT:
+            reply = await _cmd_reject_payment(db, tenant_id, parsed)
+        case OwnerCommand.PENDING_PAYMENTS:
+            reply = await _cmd_pending_payments(db, tenant_id)
+        case OwnerCommand.PLAN:
+            return await _cmd_plan(db, tenant_id, business_name)
         case OwnerCommand.BLOCK:
-            return await _cmd_block(db, tenant_id, parsed, tz_name)
+            reply = await _cmd_block(db, tenant_id, parsed, tz_name)
         case OwnerCommand.UNBLOCK:
-            return await _cmd_unblock(db, tenant_id, parsed, tz_name)
+            reply = await _cmd_unblock(db, tenant_id, parsed, tz_name)
         case OwnerCommand.STATS:
-            return await _cmd_stats(db, tenant_id, tz_name)
+            reply = await _cmd_stats(db, tenant_id, tz_name)
         case OwnerCommand.FREE:
-            return await _cmd_free(db, tenant_id, parsed, tz_name)
+            reply = await _cmd_free(db, tenant_id, parsed, tz_name)
         case OwnerCommand.PAUSE:
-            return await _cmd_pause(db, tenant_id)
+            reply = await _cmd_pause(db, tenant_id)
         case OwnerCommand.RESUME:
-            return await _cmd_resume(db, tenant_id)
+            if sub_state["access_mode"] == "suspended":
+                return (
+                    f"🔴 Cannot resume new bookings — your subscription has expired.\n"
+                    f"Renew your plan first: {renew_url}"
+                )
+            reply = await _cmd_resume(db, tenant_id)
         case OwnerCommand.HELP:
-            return _cmd_help(business_name, business_type)
+            reply = _cmd_help(business_name, business_type)
         case OwnerCommand.UNKNOWN:
-            # Check for extended commands before giving up
-            return await _try_extended_commands(db, tenant_id, body, business_name)
+            reply = await _try_extended_commands(db, tenant_id, body, business_name, sub_state)
+
+    return f"{banner}{reply}" if banner else reply
 
 
 async def _cmd_bookings(db: AsyncSession, tenant_id: str, parsed: ParsedCommand, tz_name: str) -> str:
@@ -315,7 +349,90 @@ async def _cmd_resume(db: AsyncSession, tenant_id: str) -> str:
     return "▶️ Bookings resumed! You're back online."
 
 
-async def _try_extended_commands(db: AsyncSession, tenant_id: str, body: str, business_name: str) -> str:
+async def _cmd_confirm_payment(db: AsyncSession, tenant_id: str, parsed: ParsedCommand) -> str:
+    """Verify & confirm a pending-deposit booking from WhatsApp."""
+    if not parsed.booking_ref:
+        return "Usage: *confirm <booking-id>*\nGet pending IDs with *pending*."
+    from app.payments.router import confirm_manual_payment
+
+    try:
+        res = await confirm_manual_payment(db, tenant_id, parsed.booking_ref, verified_by="owner_whatsapp")
+        return f"✅ Payment verified! Booking `{res['booking_ref']}` is now *confirmed* and the customer has been notified."
+    except ValueError as exc:
+        return str(exc)
+
+
+async def _cmd_reject_payment(db: AsyncSession, tenant_id: str, parsed: ParsedCommand) -> str:
+    """Reject an unverified deposit payment and release the slot."""
+    if not parsed.booking_ref:
+        return "Usage: *reject <booking-id>*\nGet pending IDs with *pending*."
+    from app.payments.router import reject_manual_payment
+
+    try:
+        res = await reject_manual_payment(db, tenant_id, parsed.booking_ref)
+        return f"❌ Deposit rejected for `{res['booking_ref']}`. Slot released and customer notified."
+    except ValueError as exc:
+        return str(exc)
+
+
+async def _cmd_pending_payments(db: AsyncSession, tenant_id: str) -> str:
+    """List bookings awaiting deposit payment or UTR verification."""
+    res = await db.execute(
+        text("""
+            SELECT b.id, s.name AS service_name, c.name AS customer_name, c.phone,
+                   p.amount_paise, p.status AS pay_status, p.utr_reference
+            FROM bookings b
+            JOIN services s ON s.id = b.service_id
+            JOIN customers c ON c.id = b.customer_id
+            LEFT JOIN payments p ON p.booking_id = b.id
+            WHERE b.tenant_id = :tid AND b.status = 'pending_deposit'
+            ORDER BY CASE WHEN p.status = 'submitted_utr' THEN 0 ELSE 1 END, b.created_at DESC
+            LIMIT 10
+        """),
+        {"tid": tenant_id},
+    )
+    rows = res.fetchall()
+    if not rows:
+        return "✅ No pending deposit verifications right now."
+
+    lines = [f"💳 *Pending Deposits ({len(rows)}):*\n"]
+    for r in rows:
+        bid = str(r.id)[:8]
+        amt = f"₹{(r.amount_paise or 0) // 100}"
+        utr = f" | UTR: `{r.utr_reference}`" if r.utr_reference else " | awaiting payment"
+        lines.append(f"  • `{bid}` — {r.customer_name or r.phone[-4:]} · {r.service_name} ({amt}){utr}")
+    lines.append("\nReply *confirm <id>* to approve or *reject <id>* to release slot.")
+    return "\n".join(lines)
+
+
+async def _cmd_plan(db: AsyncSession, tenant_id: str, business_name: str) -> str:
+    """Show subscription plan, days left, live usage vs quotas, and renewal link."""
+    summary = await get_usage_summary(db, UUID(tenant_id))
+    u = summary["usage"]
+    lim = summary["limits"]
+    fmt = lambda v: "∞" if v is None else str(v)
+    renew_url = f"{app_settings.dashboard_url.rstrip('/')}#settings"
+    days_line = (
+        f"  Days remaining: {summary['days_remaining']}\n"
+        if summary["days_remaining"] is not None
+        else ""
+    )
+    warn_line = f"\n⚠️ {summary['warning_message']}\n" if summary["warning_message"] else ""
+    return (
+        f"💎 *BookBot Plan — {business_name}*\n\n"
+        f"  Plan: *{summary['plan_tier'].capitalize()}* ({summary['status']})\n"
+        f"{days_line}"
+        f"  Team: {u['staff']} / {fmt(lim['max_staff'])}\n"
+        f"  Branches: {u['branches']} / {fmt(lim['max_branches'])}\n"
+        f"  Bookings this month: {u['monthly_bookings']} / {fmt(lim['max_monthly_bookings'])}"
+        f"{warn_line}\n"
+        f"Manage / Renew: {renew_url}"
+    )
+
+
+async def _try_extended_commands(
+    db: AsyncSession, tenant_id: str, body: str, business_name: str, sub_state: dict | None = None
+) -> str:
     """Try to match extended management commands."""
     from app.owner_console.commands import (
         handle_add_service,
@@ -327,12 +444,21 @@ async def _try_extended_commands(db: AsyncSession, tenant_id: str, body: str, bu
     )
 
     lower = body.strip().lower()
+    is_suspended = bool(sub_state and sub_state.get("access_mode") == "suspended")
 
     if lower.startswith("add service "):
+        if is_suspended:
+            return "🔴 Subscription expired. Renew your plan before adding new services."
         return await handle_add_service(db, tenant_id, body[12:])
     if lower.startswith("remove service "):
         return await handle_remove_service(db, tenant_id, body[15:])
     if lower.startswith("add staff "):
+        try:
+            await enforce_plan_limit(db, UUID(tenant_id), "staff")
+        except SubscriptionExpiredError as exc:
+            return f"🔴 {exc}"
+        except PlanLimitExceededError as exc:
+            return f"⚠️ Plan limit reached ({exc}). Upgrade in Settings → Billing to add more team members."
         return await handle_add_staff(db, tenant_id, body[10:])
     if lower in ("services", "my services", "list services"):
         return await handle_list_services(db, tenant_id)
@@ -349,21 +475,22 @@ def _cmd_help(business_name: str, business_type: str = "salon") -> str:
     return (
         f"🔧 *{business_name}* Commands:\n\n"
         f"*📅 Schedule*\n"
-        f"  *today* — today's {labels['bookings'].lower()}\n"
-        f"  *tomorrow* — tomorrow's {labels['bookings'].lower()}\n"
+        f"  *today* / *tomorrow* / *week*\n"
         f"  *free* — available slots\n"
         f"  *stats* — weekly summary\n\n"
+        f"*💳 Payments & Plan*\n"
+        f"  *pending* — deposits awaiting verification\n"
+        f"  *confirm <id>* / *reject <id>* — verify UPI deposit\n"
+        f"  *plan* — subscription status & usage\n\n"
         f"*🔧 Manage*\n"
-        f"  *{labels['services'].lower()}* — list {labels['services'].lower()}\n"
-        f"  *{labels['staff_plural'].lower()}* — list {labels['staff_plural'].lower()}\n"
+        f"  *{labels['services'].lower()}* / *{labels['staff_plural'].lower()}*\n"
         f"  *add service <name> <mins> <price>*\n"
         f"  *remove service <name>*\n"
         f"  *add staff <name> <role>*\n"
         f"  *set buffer 10* — gap between {labels['bookings'].lower()}\n\n"
         f"*⚡ Actions*\n"
         f"  *cancel <id>* — cancel {labels['booking'].lower()}\n"
-        f"  *block tomorrow 4-6pm*\n"
-        f"  *unblock tomorrow*\n"
+        f"  *block tomorrow 4-6pm* / *unblock tomorrow*\n"
         f"  *pause* / *resume*\n"
     )
 

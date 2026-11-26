@@ -80,13 +80,17 @@ async def _load_tenant_settings(db: AsyncSession, tenant_id: str) -> dict:
         "welcome_message": None,
         "booking_confirmed_message": None,
         "razorpay_enabled": False,
+        "upi_id": None,
+        "deposit_mode": "auto",
+        "deposit_hold_minutes": 15,
     }
     try:
         res = await db.execute(
             text(
                 "SELECT advance_booking_days, min_cancel_hours, slot_increment_minutes, "
                 "max_bookings_per_customer, welcome_message, booking_confirmed_message, "
-                "razorpay_enabled FROM tenant_settings WHERE tenant_id = :tid LIMIT 1"
+                "razorpay_enabled, upi_id, deposit_mode, deposit_hold_minutes "
+                "FROM tenant_settings WHERE tenant_id = :tid LIMIT 1"
             ),
             {"tid": tenant_id},
         )
@@ -145,6 +149,85 @@ async def handle_customer_message(
         state.tenant_id = tenant_id
         state.customer_id = customer_id
         return await _show_my_bookings(db, state, tenant_id, customer_phone, business_type, tz_name)
+
+    # Deposit payment verification buttons & UTR replies (always allowed even if subscription is paused)
+    if lower.startswith("verify_pay_"):
+        ref = lower.replace("verify_pay_", "").strip()
+        state.tenant_id = tenant_id
+        state.customer_id = customer_id
+        state.step = ConversationStep.AWAITING_PAYMENT_UTR
+        state.pending_payment_booking_id = ref
+        await set_state(tenant_id, customer_phone, state)
+        return TextResponse(
+            f"💳 Please reply with your *UPI Reference / UTR number* (12 digits from GPay/PhonePe/Paytm) "
+            f"for booking `{ref}`.\n\nExample: `412345678901`"
+        )
+
+    if lower.startswith("check_pay_"):
+        ref = lower.replace("check_pay_", "").strip()
+        from app.payments.router import check_payment_status_live
+
+        try:
+            res = await check_payment_status_live(db, tenant_id, ref)
+            if res.get("verified"):
+                await clear_state(tenant_id, customer_phone)
+                return TextResponse(
+                    f"✅ *Payment Verified!* Booking `{ref}` is confirmed. See you soon! 🙏"
+                )
+            return ButtonResponse(
+                body=(
+                    f"⏳ Payment for `{ref}` is still pending (status: {res.get('payment_status')}).\n"
+                    "If you already paid via UPI, tap below to share your UTR reference for quick confirmation."
+                ),
+                buttons=[
+                    {"id": f"check_pay_{ref}", "title": "🔄 Check Again"},
+                    {"id": f"verify_pay_{ref}", "title": "🧾 Send UPI UTR"},
+                ],
+            )
+        except ValueError as exc:
+            return TextResponse(str(exc))
+
+    if lower.startswith("paid ") and len(body.split()) >= 2:
+        parts = body.split()
+        # Formats: "paid <utr>" or "paid <booking_ref> <utr>"
+        utr_val = parts[-1]
+        ref_val = parts[1] if len(parts) >= 3 else state.pending_payment_booking_id
+        if not ref_val:
+            # Find latest pending_deposit booking for this customer
+            latest = (
+                await db.execute(
+                    text("""
+                        SELECT id FROM bookings
+                        WHERE tenant_id = :tid AND customer_id = :cid AND status = 'pending_deposit'
+                        ORDER BY created_at DESC LIMIT 1
+                    """),
+                    {"tid": tenant_id, "cid": customer_id},
+                )
+            ).first()
+            if latest:
+                ref_val = str(latest.id)[:8]
+        if ref_val:
+            return await _handle_utr_submission(db, tenant_id, customer_phone, ref_val, utr_val)
+
+    if state.step == ConversationStep.AWAITING_PAYMENT_UTR:
+        return await _handle_utr_submission(
+            db, tenant_id, customer_phone, state.pending_payment_booking_id, body
+        )
+
+    # Check tenant subscription state — when suspended, existing bookings can still be viewed/cancelled
+    # above, while new booking flows pause gracefully.
+    from app.billing.service import get_subscription_state
+
+    sub_state = await get_subscription_state(db, UUID(tenant_id))
+    if sub_state["access_mode"] == "suspended":
+        await clear_state(tenant_id, customer_phone)
+        return ButtonResponse(
+            body=(
+                f"Online booking for *{business_name}* is temporarily paused.\n"
+                "Please contact the business directly, or tap below to manage an existing appointment."
+            ),
+            buttons=[{"id": "action_mybookings", "title": "📋 My Bookings"}],
+        )
 
     if lower in ("hi", "hello", "hey", "hii", "book", "start", "menu"):
         return await _show_main_menu(
@@ -579,6 +662,20 @@ async def _handle_confirmation(
     tsettings = tsettings or {}
     is_reschedule = bool(state.booking_id_to_cancel)
 
+    # Enforce monthly booking quota & active subscription for new bookings
+    if not is_reschedule:
+        from app.billing.service import enforce_plan_limit
+        from app.exceptions import PlanLimitExceededError, SubscriptionExpiredError
+
+        try:
+            await enforce_plan_limit(db, UUID(tenant_id), "bookings")
+        except (PlanLimitExceededError, SubscriptionExpiredError):
+            await clear_state(tenant_id, customer_phone)
+            return TextResponse(
+                f"Online booking for *{business_name}* is temporarily unavailable right now. "
+                "Please contact the business directly to schedule your visit."
+            )
+
     # Enforce max_bookings_per_customer for new bookings (not reschedules)
     if not is_reschedule:
         max_active = int(tsettings.get("max_bookings_per_customer", 5))
@@ -660,24 +757,55 @@ async def _handle_confirmation(
     bid = booking["id"][:8]
     labels = get_labels(business_type)
 
-    # Handle deposit-required bookings accurately instead of claiming confirmed
+    # Handle deposit-required bookings with Razorpay Payment Link OR Direct UPI + UTR verification
     if requires_deposit:
-        pay_link_line = ""
-        if deposit_paise > 0 and app_settings.razorpay_key_id and app_settings.razorpay_key_secret:
+        pay_info = None
+        if deposit_paise > 0:
             try:
-                from app.payments.router import create_razorpay_order, generate_payment_link
+                from app.billing.service import get_subscription_state
+                from app.payments.router import create_whatsapp_deposit_payment
 
-                order = await create_razorpay_order(
-                    db=db, tenant_id=tenant_id, booking_id=booking["id"], amount_paise=deposit_paise
-                )
-                url = generate_payment_link(
-                    order["razorpay_order_id"], deposit_paise, business_name or "BookBot"
-                )
-                pay_link_line = f"\n\n💳 Pay deposit (₹{deposit_paise // 100}):\n{url}"
+                sub_st = await get_subscription_state(db, UUID(tenant_id))
+                if sub_st["entitlements"].get("deposits_enabled", False):
+                    pay_info = await create_whatsapp_deposit_payment(
+                        db=db,
+                        tenant_id=tenant_id,
+                        booking_id=booking["id"],
+                        amount_paise=deposit_paise,
+                        business_name=business_name or "BookBot",
+                        customer_phone=customer_phone,
+                        deposit_mode=tsettings.get("deposit_mode", "auto"),
+                        upi_id=tsettings.get("upi_id"),
+                        hold_minutes=int(tsettings.get("deposit_hold_minutes", 15)),
+                    )
             except Exception as exc:
                 logger.warning("deposit_link_creation_failed", error=str(exc))
 
         deposit_str = f"₹{deposit_paise // 100}" if deposit_paise else "the required deposit"
+        hold_mins = int(tsettings.get("deposit_hold_minutes", 15))
+        pay_link_line = ""
+        buttons = [
+            {"id": f"verify_pay_{bid}", "title": "✅ I've Paid (UTR)"},
+            {"id": f"cancel_{bid}", "title": "❌ Cancel This"},
+        ]
+
+        if pay_info and pay_info.get("payment_method") in ("razorpay_link", "razorpay"):
+            pay_link_line = (
+                f"\n\n💳 *Pay deposit ({deposit_str}) via UPI / Card:*\n{pay_info['url']}\n"
+                f"_Auto-confirms immediately after payment (slot held {hold_mins} min)._"
+            )
+            buttons = [
+                {"id": f"check_pay_{bid}", "title": "✅ Verify Payment"},
+                {"id": f"cancel_{bid}", "title": "❌ Cancel This"},
+            ]
+        elif pay_info and pay_info.get("payment_method") == "upi_manual":
+            pay_link_line = (
+                f"\n\n💳 *Pay {deposit_str} via UPI (0% fee):*\n"
+                f"UPI ID: `{pay_info['upi_id']}`\n"
+                f"Tap to pay: {pay_info['url']}\n"
+                f"_After paying, tap *I've Paid (UTR)* below or reply `paid <12-digit UTR>` (slot held {hold_mins} min)._"
+            )
+
         return ButtonResponse(
             body=(
                 f"⏳ *{labels['booking']} reserved — Deposit Required*\n\n"
@@ -688,11 +816,8 @@ async def _handle_confirmation(
                 f"🆔 {bid}\n\n"
                 f"Please pay {deposit_str} to confirm your slot.{pay_link_line}"
             ),
-            buttons=[
-                {"id": "action_book", "title": f"{labels['booking_emoji']} {labels['service_action']} Another"},
-                {"id": f"cancel_{bid}", "title": "❌ Cancel This"},
-            ],
-            footer="Your slot is held pending deposit.",
+            buttons=buttons,
+            footer=f"Slot held for {hold_mins} mins pending deposit.",
         )
 
     custom_confirm = tsettings.get("booking_confirmed_message")
@@ -955,6 +1080,28 @@ async def _handle_subcategory_selection(db, state, tenant_id, customer_phone, bo
         )
 
     return await _proceed_to_dates(db, state, tenant_id, customer_phone, selected, tz_name, tsettings)
+
+
+async def _handle_utr_submission(
+    db: AsyncSession,
+    tenant_id: str,
+    customer_phone: str,
+    booking_ref: str,
+    utr_text: str,
+) -> TextResponse:
+    """Handle customer submitting their UPI UTR/reference number for verification."""
+    from app.payments.router import submit_utr_reference
+
+    try:
+        res = await submit_utr_reference(db, tenant_id, booking_ref, utr_text)
+        await clear_state(tenant_id, customer_phone)
+        return TextResponse(
+            f"🧾 *UTR Received (`{res['utr_reference']}`)* for booking `{res['booking_ref']}`!\n\n"
+            "We've notified the business owner to verify your UPI payment. "
+            "You'll receive a WhatsApp confirmation as soon as they approve it."
+        )
+    except ValueError as exc:
+        return TextResponse(str(exc))
 
 
 async def _show_service_list(services, tenant_id, customer_phone, state, business_type="salon"):

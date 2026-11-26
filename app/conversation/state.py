@@ -22,6 +22,7 @@ class ConversationStep(str, Enum):
     AWAITING_SLOT = "awaiting_slot"
     AWAITING_CONFIRM = "awaiting_confirm"
     AWAITING_CANCEL_CONFIRM = "awaiting_cancel_confirm"
+    AWAITING_PAYMENT_UTR = "awaiting_payment_utr"
 
 
 @dataclass
@@ -40,6 +41,7 @@ class ConversationState:
     selected_parent_id: str = ""
     selected_parent_name: str = ""
     booking_id_to_cancel: str = ""
+    pending_payment_booking_id: str = ""
     available_slots_json: str = "[]"  # cached slots for display
     services_json: str = "[]"  # cached services for display
 

@@ -727,6 +727,7 @@ html[data-theme="dark"] .apple-toast { background: rgba(58, 58, 60, 0.92); }
       </div>
     </header>
 
+    <div id="sub-banner" class="hidden" style="margin:0.75rem 1.5rem 0;padding:0.75rem 1rem;border-radius:14px;display:flex;align-items:center;justify-content:space-between;gap:0.75rem;flex-wrap:wrap;font-size:0.84rem;font-weight:500"></div>
     <main id="page-content" class="page-content"></main>
   </div>
 </div>
@@ -1165,6 +1166,8 @@ const state = {
   token: localStorage.getItem('dashboard_token'),
   tenant: null,
   tenantSettings: null,
+  subscription: null,
+  billingCycle: 'monthly',
   phone: '',
   currentTab: 'home',
   bookings: [],
@@ -1351,14 +1354,45 @@ function applyBusinessLabels() {
   });
 }
 
+function renderSubscriptionBanner() {
+  const el = document.getElementById('sub-banner');
+  if (!el) return;
+  const sub = state.subscription;
+  if (!sub || !sub.warning_message || !['warning', 'critical', 'expired'].includes(sub.warning_level)) {
+    el.classList.add('hidden');
+    el.style.display = 'none';
+    return;
+  }
+  const isCrit = sub.warning_level === 'expired' || sub.warning_level === 'critical';
+  el.style.display = 'flex';
+  el.style.background = isCrit ? 'var(--red-soft)' : 'var(--orange-soft)';
+  el.style.color = isCrit ? 'var(--red-text)' : 'var(--orange-text)';
+  el.style.border = `0.5px solid ${isCrit ? 'rgba(255,59,48,0.28)' : 'rgba(255,149,0,0.32)'}`;
+  el.classList.remove('hidden');
+  el.innerHTML = `
+    <div style="display:flex;align-items:center;gap:0.55rem">
+      <span>${sub.is_expired ? '🔴' : '⚠️'}</span>
+      <span>${escHtml(sub.warning_message)}</span>
+    </div>
+    <button class="btn btn-primary btn-sm" onclick="window.location.hash='#settings'">
+      ${sub.is_expired ? 'Renew Plan Now' : 'Manage Plan'}
+    </button>`;
+}
+
 async function showApp() {
   document.getElementById('login-page').classList.add('hidden');
   document.getElementById('app-shell').classList.remove('hidden');
   try {
-    const [tenant, tsettings] = await Promise.all([apiGet('/tenant'), apiGet('/tenant/settings')]);
+    const [tenant, tsettings, sub] = await Promise.all([
+      apiGet('/tenant'),
+      apiGet('/tenant/settings'),
+      apiGet('/billing/subscription').catch(() => null),
+    ]);
     state.tenant = tenant;
     state.tenantSettings = tsettings;
+    state.subscription = sub;
     applyBusinessLabels();
+    renderSubscriptionBanner();
     if (!tenant.onboarded_at) {
       showOnboardingWizard();
       return;
@@ -1743,7 +1777,9 @@ async function showBookingDetail(id) {
 
         ${b.status === 'confirmed' || b.status === 'pending_deposit' ? `
         <div style="display:flex;gap:0.5rem;flex-wrap:wrap;padding-top:0.4rem">
-          ${b.status === 'pending_deposit' ? `<button class="btn btn-soft-green btn-sm" onclick="changeBookingStatus('${b.id}','confirmed');closeSheet()">Confirm Deposit</button>` : ''}
+          ${b.status === 'pending_deposit' ? `<button class="btn btn-soft-green btn-sm" onclick="verifyBookingDeposit('${b.id}','confirm')">Verify &amp; Confirm Deposit</button>` : ''}
+          ${b.status === 'pending_deposit' ? `<button class="btn btn-soft-blue btn-sm" onclick="verifyBookingDeposit('${b.id}','check')">Check Razorpay Status</button>` : ''}
+          ${b.status === 'pending_deposit' ? `<button class="btn btn-soft-red btn-sm" onclick="verifyBookingDeposit('${b.id}','reject')">Reject Deposit</button>` : ''}
           ${b.status === 'confirmed' ? `<button class="btn btn-soft-blue btn-sm" onclick="changeBookingStatus('${b.id}','completed');closeSheet()">Mark Completed</button>` : ''}
           ${b.status === 'confirmed' ? `<button class="btn btn-secondary btn-sm" onclick="changeBookingStatus('${b.id}','no_show');closeSheet()">Mark No-Show</button>` : ''}
           <button class="btn btn-soft-red btn-sm" onclick="changeBookingStatus('${b.id}','cancelled');closeSheet()">Cancel ${escHtml(L.booking)}</button>
@@ -1754,6 +1790,35 @@ async function showBookingDetail(id) {
       <button class="btn btn-primary" onclick="saveBookingNotes('${b.id}')">Save Notes</button>
     `);
   } catch (e) {}
+}
+
+async function verifyBookingDeposit(id, action) {
+  try {
+    const endpoint = action === 'confirm'
+      ? `/payments/${id}/confirm-manual`
+      : action === 'reject'
+        ? `/payments/${id}/reject-manual`
+        : `/payments/${id}/check-status`;
+    const resp = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${state.token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({})
+    });
+    const data = await resp.json().catch(() => ({}));
+    if (!resp.ok) throw new Error(data.detail || 'Action failed');
+    if (action === 'check') {
+      toast(data.verified ? 'Payment verified on Razorpay — booking confirmed!' : `Payment status: ${data.payment_status || 'pending'}`, data.verified ? 'success' : 'info');
+      if (data.verified) { closeSheet(); loadBookings(); }
+    } else if (action === 'confirm') {
+      toast('Deposit confirmed & customer notified on WhatsApp');
+      closeSheet(); loadBookings();
+    } else {
+      toast('Deposit rejected & slot released', 'warning');
+      closeSheet(); loadBookings();
+    }
+  } catch (e) {
+    toast(e.message || 'Deposit verification failed', 'error');
+  }
 }
 
 async function saveBookingNotes(id) {
@@ -2468,9 +2533,46 @@ async function renderSettings() {
         <div style="margin-top:0.9rem"><button class="btn btn-primary btn-sm" onclick="saveHours('${primary?.id || ''}')">Save Hours</button></div>
       </div>
 
+      <!-- WhatsApp Deposits & UPI Verification -->
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.85rem">
+          <h3 class="t-heading" style="margin:0">WhatsApp Booking Deposits &amp; UPI</h3>
+          <span class="pill ${state.subscription?.entitlements?.deposits_enabled ? 'pill-confirmed' : 'pill-no_show'}">${state.subscription?.entitlements?.deposits_enabled ? 'Unlocked' : 'Growth+ Feature'}</span>
+        </div>
+        <form id="set-deposits" style="display:flex;flex-direction:column;gap:0.85rem">
+          <div class="grid-3">
+            <div>
+              <label class="field-label">Collection Mode</label>
+              <select name="deposit_mode" class="select">
+                <option value="auto" ${(s.deposit_mode || 'auto') === 'auto' ? 'selected' : ''}>Auto (Razorpay → Direct UPI)</option>
+                <option value="razorpay" ${s.deposit_mode === 'razorpay' ? 'selected' : ''}>Razorpay Payment Links</option>
+                <option value="upi_manual" ${s.deposit_mode === 'upi_manual' ? 'selected' : ''}>Direct UPI + UTR Verify (0% fee)</option>
+                <option value="disabled" ${s.deposit_mode === 'disabled' ? 'selected' : ''}>Disabled</option>
+              </select>
+            </div>
+            <div>
+              <label class="field-label">Merchant UPI ID (VPA)</label>
+              <input name="upi_id" class="input t-mono" value="${escHtml(s.upi_id || '')}" placeholder="yourshop@okicici">
+            </div>
+            <div>
+              <label class="field-label">Slot Hold Duration (mins)</label>
+              <input name="deposit_hold_minutes" type="number" min="5" max="1440" class="input t-num" value="${s.deposit_hold_minutes || 15}">
+            </div>
+          </div>
+          <div class="t-caption">Razorpay Payment Links verify automatically via webhook. Direct UPI collects a 12-digit UTR from the customer on WhatsApp and lets you reply <code>confirm &lt;id&gt;</code> to approve in 1 tap.</div>
+          <div><button type="button" class="btn btn-primary btn-sm" onclick="saveDepositSettings()">Save Deposit Settings</button></div>
+        </form>
+      </div>
+
       <!-- Billing & Subscription -->
       <div class="card">
-        <h3 class="t-heading" style="margin:0 0 0.85rem">Plan &amp; Usage</h3>
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.75rem;margin-bottom:0.85rem">
+          <h3 class="t-heading" style="margin:0">Plan, Usage &amp; Invoices</h3>
+          <div class="segmented" style="padding:2px">
+            <button type="button" class="${state.billingCycle === 'monthly' ? 'active' : ''}" onclick="setBillingCycle('monthly')">Monthly</button>
+            <button type="button" class="${state.billingCycle === 'annual' ? 'active' : ''}" onclick="setBillingCycle('annual')">Annual (2 mo free)</button>
+          </div>
+        </div>
         <div id="billing-box" class="t-caption">Loading plan details…</div>
       </div>
     </div>`;
@@ -2572,44 +2674,147 @@ async function deleteBranch(id) {
   try { await apiDelete(`/branches/${id}`); toast('Branch deleted'); renderSettings(); } catch (e) {}
 }
 
+async function saveDepositSettings() {
+  const fd = new FormData(document.getElementById('set-deposits'));
+  try {
+    state.tenantSettings = await apiPut('/tenant/settings', {
+      deposit_mode: fd.get('deposit_mode'),
+      upi_id: (fd.get('upi_id') || '').trim() || null,
+      deposit_hold_minutes: parseInt(fd.get('deposit_hold_minutes')) || 15,
+    });
+    toast('Deposit settings saved');
+  } catch (e) {}
+}
+
+function setBillingCycle(cycle) {
+  state.billingCycle = cycle;
+  renderSettings();
+}
+
+function loadRazorpayScript() {
+  return new Promise((resolve, reject) => {
+    if (window.Razorpay) { resolve(); return; }
+    const s = document.createElement('script');
+    s.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    s.onload = resolve;
+    s.onerror = () => reject(new Error('Could not load Razorpay Checkout'));
+    document.head.appendChild(s);
+  });
+}
+
 async function loadBillingBox() {
   const box = document.getElementById('billing-box');
   if (!box) return;
   try {
-    const [sub, plans] = await Promise.all([apiGet('/billing/subscription'), apiGet('/billing/plans')]);
-    const u = sub.usage || {}; const lim = sub.limits || {};
+    const [sub, plans, invoices] = await Promise.all([
+      apiGet('/billing/subscription'),
+      apiGet('/billing/plans'),
+      apiGet('/billing/invoices').catch(() => []),
+    ]);
+    state.subscription = sub;
+    renderSubscriptionBanner();
+
+    const u = sub.usage || {}; const lim = sub.limits || {}; const ent = sub.entitlements || {};
     const f = (v) => v == null ? '∞' : v;
+    const isAnnual = state.billingCycle === 'annual';
+    const statusPillClass = sub.is_expired ? 'pill-cancelled' : (sub.access_mode === 'grace_warning' ? 'pill-pending_deposit' : 'pill-confirmed');
+
     box.innerHTML = `
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:0.75rem 1rem;border-radius:12px;background:var(--blue-soft);margin-bottom:1rem">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.75rem;padding:0.85rem 1rem;border-radius:12px;background:${sub.is_expired ? 'var(--red-soft)' : 'var(--blue-soft)'};margin-bottom:1rem">
         <div>
-          <strong style="color:var(--blue);text-transform:uppercase;font-size:0.78rem;letter-spacing:0.05em">${escHtml(sub.plan_tier)} Plan</strong>
-          <span class="pill pill-confirmed" style="margin-left:0.5rem">${escHtml(sub.status)}</span>
+          <strong style="color:${sub.is_expired ? 'var(--red-text)' : 'var(--blue)'};text-transform:uppercase;font-size:0.78rem;letter-spacing:0.05em">${escHtml(sub.plan_tier)} Plan (${escHtml(sub.billing_cycle || 'monthly')})</strong>
+          <span class="pill ${statusPillClass}" style="margin-left:0.5rem">${escHtml(sub.status)}</span>
+          ${sub.days_remaining != null ? `<span class="t-caption" style="margin-left:0.5rem">${sub.days_remaining}d remaining</span>` : ''}
         </div>
-        ${sub.status === 'trial' && sub.trial_ends_at ? `<span class="t-caption" style="color:var(--blue)">14-day trial ends ${formatDate(sub.trial_ends_at)}</span>` : ''}
+        ${sub.status === 'active' && !sub.cancel_at_period_end ? `<button class="btn btn-ghost btn-sm" style="color:var(--red-text)" onclick="cancelMySubscription()">Cancel at Period End</button>` : ''}
       </div>
+
       <div class="grid-3" style="margin-bottom:1rem;text-align:center">
         <div style="padding:0.75rem;border-radius:12px;background:var(--surface-secondary)"><div class="t-title t-num">${u.staff || 0} / ${f(lim.max_staff)}</div><div class="t-micro">Team</div></div>
         <div style="padding:0.75rem;border-radius:12px;background:var(--surface-secondary)"><div class="t-title t-num">${u.branches || 0} / ${f(lim.max_branches)}</div><div class="t-micro">Branches</div></div>
         <div style="padding:0.75rem;border-radius:12px;background:var(--surface-secondary)"><div class="t-title t-num">${u.monthly_bookings || 0} / ${f(lim.max_monthly_bookings)}</div><div class="t-micro">Bookings / mo</div></div>
       </div>
+
+      <div style="display:flex;flex-wrap:wrap;gap:0.45rem;margin-bottom:1rem">
+        <span class="pill ${ent.deposits_enabled ? 'pill-confirmed' : 'pill-no_show'}">${ent.deposits_enabled ? '✓' : '🔒'} WhatsApp Deposits</span>
+        <span class="pill ${ent.google_calendar_enabled ? 'pill-confirmed' : 'pill-no_show'}">${ent.google_calendar_enabled ? '✓' : '🔒'} Google Calendar</span>
+        <span class="pill ${ent.rebooking_enabled ? 'pill-confirmed' : 'pill-no_show'}">${ent.rebooking_enabled ? '✓' : '🔒'} Rebooking Nudges</span>
+        <span class="pill ${ent.custom_subdomain ? 'pill-confirmed' : 'pill-no_show'}">${ent.custom_subdomain ? '✓' : '🔒'} Custom Subdomain</span>
+      </div>
+
       <div class="grid-3">
-        ${plans.map(p => `
-          <div class="card card-tight" style="border:${p.tier === sub.plan_tier ? '1.5px solid var(--blue)' : '0.5px solid var(--hairline)'};box-shadow:none">
+        ${plans.map(p => {
+          const isCur = p.tier === sub.plan_tier && !sub.is_expired && sub.status !== 'trial';
+          const price = isAnnual ? Math.round(p.price_annual_inr / 12) : p.price_monthly_inr;
+          const subTxt = isAnnual ? `₹${p.price_annual_inr}/yr billed annually` : 'Billed monthly';
+          return `
+          <div class="card card-tight" style="border:${isCur ? '1.5px solid var(--blue)' : '0.5px solid var(--hairline)'};box-shadow:none">
             <div class="t-heading">${escHtml(p.name)}</div>
-            <div class="t-title t-num" style="margin:0.35rem 0">₹${p.price_monthly_inr}<span class="t-caption">/mo</span></div>
-            <button class="btn ${p.tier === sub.plan_tier ? 'btn-secondary' : 'btn-primary'} btn-sm" style="width:100%;margin-top:0.5rem" ${p.tier === sub.plan_tier ? 'disabled' : ''} onclick="switchPlan('${p.tier}')">
-              ${p.tier === sub.plan_tier ? 'Current Plan' : 'Choose ' + escHtml(p.name)}
+            <div class="t-title t-num" style="margin:0.3rem 0 0.1rem">₹${price}<span class="t-caption">/mo</span></div>
+            <div class="t-caption" style="margin-bottom:0.6rem">${subTxt}</div>
+            <button class="btn ${isCur ? 'btn-secondary' : 'btn-primary'} btn-sm" style="width:100%" ${isCur ? 'disabled' : ''} onclick="switchPlan('${p.tier}')">
+              ${isCur ? 'Current Plan' : (sub.is_expired ? 'Renew ' : 'Choose ') + escHtml(p.name)}
             </button>
-          </div>`).join('')}
-      </div>`;
+          </div>`;
+        }).join('')}
+      </div>
+
+      ${invoices.length ? `
+      <div style="margin-top:1.25rem;padding-top:1rem;border-top:0.5px solid var(--hairline)">
+        <div class="t-micro" style="margin-bottom:0.5rem">Billing History</div>
+        <div style="display:flex;flex-direction:column;gap:0.4rem">
+          ${invoices.slice(0, 6).map(inv => `
+            <div style="display:flex;justify-content:space-between;align-items:center;font-size:0.82rem;padding:0.45rem 0.65rem;border-radius:9px;background:var(--surface-secondary)">
+              <span><strong>${escHtml(inv.plan_tier.toUpperCase())}</strong> (${escHtml(inv.billing_cycle)}) &middot; ${formatDate(inv.created_at)}</span>
+              <span class="t-num"><strong>₹${Math.round((inv.amount_paise || 0) / 100)}</strong> <span class="pill pill-confirmed" style="margin-left:4px">${escHtml(inv.status)}</span></span>
+            </div>`).join('')}
+        </div>
+      </div>` : ''}`;
   } catch (e) {}
 }
 
 async function switchPlan(tier) {
+  const cycle = state.billingCycle || 'monthly';
   try {
-    await apiPut('/billing/plan', { plan_tier: tier, billing_cycle: 'monthly' });
-    state.tenant.plan_tier = tier;
-    toast(`Switched to ${tier.toUpperCase()} plan`);
+    const res = await apiPost('/billing/checkout', { plan_tier: tier, billing_cycle: cycle });
+    if (res.checkout_mode === 'sandbox_activated') {
+      state.tenant.plan_tier = tier;
+      toast(`Activated ${tier.toUpperCase()} (${cycle}) plan`);
+      loadBillingBox();
+      return;
+    }
+    // Live Razorpay Checkout (Subscription or Order)
+    await loadRazorpayScript();
+    const opts = {
+      key: res.key_id,
+      name: 'BookBot Subscription',
+      description: `${tier.toUpperCase()} Plan (${cycle})`,
+      handler: async (response) => {
+        await apiPost('/billing/verify-payment', {
+          plan_tier: tier,
+          billing_cycle: cycle,
+          razorpay_payment_id: response.razorpay_payment_id,
+          razorpay_signature: response.razorpay_signature,
+          razorpay_subscription_id: response.razorpay_subscription_id || null,
+          razorpay_order_id: response.razorpay_order_id || null,
+        });
+        state.tenant.plan_tier = tier;
+        toast(`Payment verified — ${tier.toUpperCase()} plan active!`);
+        loadBillingBox();
+      },
+      theme: { color: '#007AFF' },
+    };
+    if (res.razorpay_subscription_id) opts.subscription_id = res.razorpay_subscription_id;
+    else { opts.order_id = res.razorpay_order_id; opts.amount = res.amount_paise; opts.currency = 'INR'; }
+    new window.Razorpay(opts).open();
+  } catch (e) {}
+}
+
+async function cancelMySubscription() {
+  if (!confirm('Cancel subscription at the end of your current billing period? You will keep full access until then.')) return;
+  try {
+    await apiPost('/billing/cancel', { immediate: false });
+    toast('Subscription scheduled to cancel at period end', 'warning');
     loadBillingBox();
   } catch (e) {}
 }

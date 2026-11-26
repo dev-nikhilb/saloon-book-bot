@@ -137,9 +137,12 @@ class TenantSettings(Base):
     booking_confirmed_message: Mapped[str | None] = mapped_column(Text)
     google_review_url: Mapped[str | None] = mapped_column(Text)
 
-    # Integrations
+    # Integrations & Deposit Collection
     google_calendar_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
     razorpay_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")
+    upi_id: Mapped[str | None] = mapped_column(Text)
+    deposit_mode: Mapped[str] = mapped_column(Text, nullable=False, server_default="auto")  # auto, razorpay, upi_manual, disabled
+    deposit_hold_minutes: Mapped[int] = mapped_column(Integer, nullable=False, server_default="15")
 
     # Timestamps
     created_at: Mapped[datetime] = mapped_column(

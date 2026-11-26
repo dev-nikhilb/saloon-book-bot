@@ -307,6 +307,15 @@ function renderBusiness() {
   renderServices();
   document.getElementById('loading').classList.add('hidden');
   document.getElementById('booking-app').classList.remove('hidden');
+
+  if (biz.booking_paused) {
+    document.getElementById('step-service').innerHTML = `
+      <div style="text-align:center;padding:2rem 1rem">
+        <div style="font-size:2rem;margin-bottom:0.5rem">⏸️</div>
+        <h2 style="margin:0 0 0.4rem;font-size:1.15rem">Online Booking Temporarily Paused</h2>
+        <p class="t-caption" style="margin:0">Please contact <strong>${esc(biz.business_name)}</strong> directly on WhatsApp or phone to schedule your visit.</p>
+      </div>`;
+  }
 }
 
 function onBranchChange() {
@@ -442,7 +451,13 @@ async function submitBooking(e) {
     if (data.payment_url) {
       const cta = document.getElementById('payment-cta');
       cta.classList.remove('hidden');
-      cta.innerHTML = `<a href="${esc(data.payment_url)}" target="_blank" class="btn-primary" style="display:block;text-decoration:none;background:var(--orange)">Pay Deposit (${inr(data.deposit_amount_paise)})</a>`;
+      if (data.payment_method === 'upi_manual') {
+        cta.innerHTML = `
+          <a href="${esc(data.payment_url)}" class="btn-primary" style="display:block;text-decoration:none;background:var(--orange)">Pay ${inr(data.deposit_amount_paise)} via UPI App</a>
+          <div class="t-caption" style="margin-top:0.65rem">UPI ID: <code style="font-family:ui-monospace,monospace">${esc(data.upi_id || '')}</code><br>After paying, reply <strong>paid &lt;12-digit UTR&gt;</strong> on WhatsApp to confirm your slot.</div>`;
+      } else {
+        cta.innerHTML = `<a href="${esc(data.payment_url)}" target="_blank" class="btn-primary" style="display:block;text-decoration:none;background:var(--orange)">Pay Deposit (${inr(data.deposit_amount_paise)})</a>`;
+      }
     }
   } catch (ex) {
     err.textContent = ex.message;
