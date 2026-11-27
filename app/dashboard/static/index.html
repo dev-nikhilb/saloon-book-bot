@@ -103,7 +103,7 @@ html[data-theme="dark"] {
 
 *, *::before, *::after { box-sizing: border-box; }
 html, body {
-  margin: 0; padding: 0; min-height: 100%;
+  margin: 0; padding: 0; min-height: 100%; overflow-x: clip;
   background: var(--bg); color: var(--label);
   transition: background-color 280ms ease, color 220ms ease;
   -webkit-tap-highlight-color: transparent;
@@ -723,6 +723,79 @@ html[data-theme="dark"] .apple-toast { background: rgba(58, 58, 60, 0.92); }
 @keyframes viewFade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 
 /* ==========================================================================
+   iOS TRANSLUCENT BOTTOM TAB BAR + PHONE VIEW POLISH (< 960px & < 640px)
+   ========================================================================== */
+.mobile-tabbar { display: none; }
+
+@media (max-width: 960px) {
+  .page-content { padding: 0.95rem 0.9rem calc(88px + env(safe-area-inset-bottom, 0px)); }
+  .mobile-tabbar {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 34;
+    display: grid; grid-template-columns: repeat(5, minmax(0, 1fr));
+    background: var(--toolbar-bg);
+    backdrop-filter: blur(26px) saturate(190%);
+    -webkit-backdrop-filter: blur(26px) saturate(190%);
+    border-top: 0.5px solid var(--separator);
+    padding: 0.42rem 0.25rem calc(0.42rem + env(safe-area-inset-bottom, 0px));
+  }
+  .m-tab {
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+    border: none; background: transparent; color: var(--label-secondary); text-decoration: none;
+    font-family: inherit; font-size: 0.64rem; font-weight: 600; letter-spacing: 0.005em;
+    padding: 0.22rem 0.15rem; border-radius: 10px; cursor: pointer;
+    transition: color 140ms ease, transform 90ms ease;
+  }
+  .m-tab:active { transform: scale(0.92); }
+  .m-tab.active { color: var(--blue); }
+  .m-tab svg { width: 21px; height: 21px; stroke-width: 1.9; }
+}
+
+@media (max-width: 640px) {
+  .toolbar { height: 54px; padding: 0 0.85rem; gap: 0.5rem; }
+  #page-title { font-size: 1.05rem !important; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 145px; }
+  #header-owner-name { display: none; }
+  #toolbar-primary-action { padding: 0.36rem 0.65rem; font-size: 0.76rem; white-space: nowrap; }
+  #sub-banner { margin: 0.6rem 0.9rem 0 !important; padding: 0.65rem 0.85rem !important; font-size: 0.79rem !important; }
+
+  .card { padding: 1rem; border-radius: 18px; }
+  .share-banner { padding: 0.85rem 1rem; gap: 0.65rem; }
+  .share-banner > div:last-child { width: 100%; display: flex; gap: 0.5rem; }
+  .share-banner > div:last-child .btn { flex: 1; }
+
+  /* Compact 2x2 KPI & Appointment Insights grids on phones so schedule stays above the fold */
+  .kpi-grid, .bk-insights { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 0.65rem; margin-bottom: 0.85rem; }
+  .kpi-card, .bk-stat { padding: 0.82rem 0.9rem; border-radius: 16px; }
+  .t-display { font-size: 1.45rem; }
+  .bk-stat-val { font-size: 1.28rem; }
+
+  /* Horizontal touch-scroll rails for date range & status chips on phone */
+  .bk-toolbar-card { padding: 0.75rem 0.85rem; gap: 0.6rem; border-radius: 18px; }
+  .bk-date-nav {
+    width: 100%; flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .bk-date-nav::-webkit-scrollbar, .bk-status-pills::-webkit-scrollbar { display: none; }
+  .bk-range-btn, .bk-step-btn { flex-shrink: 0; }
+  #bk-view-seg { width: 100%; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  #bk-view-seg button { padding: 0.42rem 0.4rem; font-size: 0.78rem; }
+  .bk-status-pills {
+    width: 100%; flex-wrap: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch;
+    scrollbar-width: none; padding-bottom: 2px;
+  }
+  .bk-chip { flex-shrink: 0; padding: 0.36rem 0.65rem; }
+  .bk-search-wrap { min-width: 0; max-width: none; width: 100%; }
+  #bk-staff { width: 100% !important; }
+  .bk-attention { padding: 0.65rem 0.85rem; font-size: 0.8rem; }
+
+  /* Prevent iOS Safari input auto-zoom & make modals/sheets comfortable on phone */
+  .input, .select, .textarea { font-size: 16px; }
+  .modal-card { width: calc(100vw - 20px) !important; max-width: 100% !important; max-height: 90dvh; border-radius: 20px; }
+  .login-card { padding: 1.6rem 1.35rem; border-radius: 22px; }
+  .table-wrap { margin: 0 -1rem; padding: 0 1rem; -webkit-overflow-scrolling: touch; }
+  .hours-row { flex-wrap: wrap; gap: 0.45rem !important; }
+}
+
+/* ==========================================================================
    ACCESSIBILITY: Reduced Motion, Reduced Transparency, High Contrast (§14)
    ========================================================================== */
 @media (prefers-reduced-motion: reduce) {
@@ -732,7 +805,7 @@ html[data-theme="dark"] .apple-toast { background: rgba(58, 58, 60, 0.92); }
   #app-shell.pushed-back { transform: none !important; }
 }
 @media (prefers-reduced-transparency: reduce) {
-  .sidebar, .toolbar, .sheet-panel, .modal-card, .login-card, .apple-toast {
+  .sidebar, .toolbar, .mobile-tabbar, .sheet-panel, .modal-card, .login-card, .apple-toast {
     backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
     background: var(--surface) !important;
   }
@@ -901,6 +974,30 @@ html[data-theme="dark"] .apple-toast { background: rgba(58, 58, 60, 0.92); }
     <div id="sub-banner" class="hidden" style="margin:0.75rem 1.5rem 0;padding:0.75rem 1rem;border-radius:14px;display:flex;align-items:center;justify-content:space-between;gap:0.75rem;flex-wrap:wrap;font-size:0.84rem;font-weight:500"></div>
     <main id="page-content" class="page-content"></main>
   </div>
+
+  <!-- iOS-Style Frosted Bottom Tab Bar (Mobile Only) -->
+  <nav class="mobile-tabbar" id="mobile-tabbar" aria-label="Mobile Navigation">
+    <a href="#home" class="m-tab" data-tab="home">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg>
+      <span>Overview</span>
+    </a>
+    <a href="#bookings" class="m-tab" data-tab="bookings">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="3"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
+      <span data-label="bookings">Schedule</span>
+    </a>
+    <a href="#services" class="m-tab" data-tab="services">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h10" stroke-linecap="round"/></svg>
+      <span data-label="services">Services</span>
+    </a>
+    <a href="#customers" class="m-tab" data-tab="customers">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.6-7 8-7s8 3 8 7"/></svg>
+      <span data-label="customers">Clients</span>
+    </a>
+    <button type="button" class="m-tab" data-tab="more" onclick="openSidebar()">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.7" fill="currentColor"/><circle cx="12" cy="12" r="1.7" fill="currentColor"/><circle cx="19" cy="12" r="1.7" fill="currentColor"/></svg>
+      <span>More</span>
+    </button>
+  </nav>
 </div>
 
 <script>
@@ -1627,6 +1724,10 @@ function navigateTo(tab) {
   };
   document.getElementById('page-title').textContent = titles[tab] || 'Overview';
   document.querySelectorAll('.nav-item').forEach(el => el.classList.toggle('active', el.dataset.tab === tab));
+  document.querySelectorAll('.m-tab').forEach(el => {
+    const isMore = el.dataset.tab === 'more' && !['home', 'bookings', 'services', 'customers'].includes(tab);
+    el.classList.toggle('active', el.dataset.tab === tab || isMore);
+  });
   requestAnimationFrame(() => moveNavPill(tab));
   closeSidebar();
   setToolbarAction(null);
@@ -3449,7 +3550,7 @@ async function renderSettings() {
         <div style="display:flex;flex-direction:column;gap:0.5rem">
           ${days.map(d => {
             const w = (opHours[d] && opHours[d][0]) || null;
-            return `<div style="display:flex;align-items:center;gap:0.75rem;padding:0.4rem 0;border-bottom:0.5px solid var(--hairline)">
+            return `<div class="hours-row" style="display:flex;align-items:center;gap:0.75rem;padding:0.4rem 0;border-bottom:0.5px solid var(--hairline)">
               <label style="width:105px;display:flex;align-items:center;gap:0.45rem;font-size:0.84rem;font-weight:500">
                 <input type="checkbox" id="day-on-${d}" ${w ? 'checked' : ''}> ${dayNames[d]}
               </label>
