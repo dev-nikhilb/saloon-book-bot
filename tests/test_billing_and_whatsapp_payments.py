@@ -958,14 +958,28 @@ async def test_tech_provider_embedded_signup_coexistence_and_compliance_pages(db
         assert info["embedded_signup_enabled"] is True
         assert info["meta_config_id"] == "cfg_999"
 
+        # Fresh Cloud API number -> subscribes webhook AND auto-registers phone
         emb = client.post(
             "/api/tenant/whatsapp/embedded-signup",
             headers=headers,
-            json={"code": "oauth_code_abc", "waba_id": waba_id, "phone_number_id": pid},
+            json={"code": "oauth_code_abc", "waba_id": waba_id, "phone_number_id": pid, "is_coexistence": False},
         )
         assert emb.status_code == 200
         assert emb.json()["status"] == "connected"
         assert emb.json()["webhook_subscribed"] is True
+        assert emb.json()["phone_registered"] is True
+        assert emb.json()["is_coexistence"] is False
+
+        # Coexistence number -> subscribes webhook and skips /register
+        emb_coex = client.post(
+            "/api/tenant/whatsapp/embedded-signup",
+            headers=headers,
+            json={"code": "oauth_code_xyz", "waba_id": waba_id, "phone_number_id": pid, "is_coexistence": True},
+        )
+        assert emb_coex.status_code == 200
+        assert emb_coex.json()["webhook_subscribed"] is True
+        assert emb_coex.json()["phone_registered"] is False
+        assert emb_coex.json()["is_coexistence"] is True
 
         tst = client.post("/api/tenant/whatsapp/test", headers=headers)
         assert tst.status_code == 200

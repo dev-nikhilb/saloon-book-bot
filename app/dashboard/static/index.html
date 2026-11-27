@@ -2959,13 +2959,18 @@ async function launchMetaEmbeddedSignup() {
 
   let capturedWabaId = '';
   let capturedPhoneId = '';
+  let isCoexistence = false;
   const msgListener = (event) => {
     if (event.origin !== 'https://www.facebook.com' && event.origin !== 'https://web.facebook.com') return;
     try {
       const data = typeof event.data === 'string' ? JSON.parse(event.data) : event.data;
-      if (data.type === 'WA_EMBEDDED_SIGNUP' && (data.event === 'FINISH' || data.event === 'FINISH_ONLY_WABA')) {
+      if (
+        data.type === 'WA_EMBEDDED_SIGNUP' &&
+        (data.event === 'FINISH' || data.event === 'FINISH_ONLY_WABA' || data.event === 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING')
+      ) {
         capturedWabaId = data.data?.waba_id || capturedWabaId;
         capturedPhoneId = data.data?.phone_number_id || capturedPhoneId;
+        if (data.event === 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING') isCoexistence = true;
       }
     } catch (_) {}
   };
@@ -2986,10 +2991,13 @@ async function launchMetaEmbeddedSignup() {
       code,
       waba_id: capturedWabaId,
       phone_number_id: capturedPhoneId,
+      is_coexistence: isCoexistence,
     }).then((res) => {
       state.tenant.waba_phone_number_id = res.waba_phone_number_id;
       state.tenant.waba_business_account_id = res.waba_business_account_id;
-      toast('🎉 WhatsApp connected & webhook auto-subscribed!');
+      toast(res.is_coexistence
+        ? '🎉 WhatsApp Business App connected in Coexistence mode!'
+        : '🎉 WhatsApp connected, registered & webhook auto-subscribed!');
       renderSettings();
     }).catch(() => {});
   }, {

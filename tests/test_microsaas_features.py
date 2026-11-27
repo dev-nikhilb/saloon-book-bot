@@ -291,7 +291,7 @@ class TestWhatsAppDepositFlow:
         r_svc = client.post("/dev/simulate", json={"from_phone": cust_phone, "body": hair_color_id, "to_tenant_phone": seed["owner_phone"]}).json()
         if "who would you prefer" in r_svc["message"].lower():
             client.post("/dev/simulate", json={"from_phone": cust_phone, "body": "staff_any", "to_tenant_phone": seed["owner_phone"]})
-        r_date = client.post("/dev/simulate", json={"from_phone": cust_phone, "body": "date_0", "to_tenant_phone": seed["owner_phone"]}).json()
+        r_date = client.post("/dev/simulate", json={"from_phone": cust_phone, "body": "date_1", "to_tenant_phone": seed["owner_phone"]}).json()
         if "part of the day" in r_date["message"].lower():
             client.post("/dev/simulate", json={"from_phone": cust_phone, "body": "period_morning", "to_tenant_phone": seed["owner_phone"]})
         client.post("/dev/simulate", json={"from_phone": cust_phone, "body": "slot_0", "to_tenant_phone": seed["owner_phone"]})

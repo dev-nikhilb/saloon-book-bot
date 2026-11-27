@@ -105,8 +105,8 @@ class TestE2EBookingFlow:
             assert r3["received"]
         assert "pick a date" in r3["message"].lower()
 
-        # Step 4: Select a date
-        r4 = simulate(client, cust_phone, "action_date_0", seed["owner_phone"])
+        # Step 4: Select a date (use date_1 = next full open day so Morning slots always exist at any hour)
+        r4 = simulate(client, cust_phone, "action_date_1", seed["owner_phone"])
         assert r4["received"]
         # Full-day schedules with >10 slots offer Morning/Afternoon/Evening filter first
         if "part of the day" in r4["message"].lower():

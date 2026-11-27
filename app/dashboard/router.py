@@ -533,6 +533,40 @@ class EmbeddedSignupCompleteRequest(BaseModel):
     code: str = Field(..., min_length=4)
     waba_id: str = Field(..., min_length=5)
     phone_number_id: str = Field(..., min_length=5)
+    is_coexistence: bool = False
+    register_pin: str | None = Field(None, min_length=6, max_length=6)
+
+
+async def _register_cloud_api_phone(
+    phone_number_id: str, access_token: str, pin: str | None = None
+) -> bool:
+    """Register a fresh (non-Coexistence) Cloud API phone number as an Independent Tech Provider."""
+    if not phone_number_id or not access_token:
+        return False
+    import secrets
+
+    import httpx
+
+    eff_pin = (pin or "").strip() if pin and pin.isdigit() and len(pin) == 6 else f"{secrets.randbelow(900000) + 100000}"
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(
+                f"https://graph.facebook.com/v25.0/{phone_number_id.strip()}/register",
+                json={"messaging_product": "whatsapp", "pin": eff_pin},
+                headers={"Authorization": f"Bearer {access_token.strip()}"},
+            )
+            if resp.status_code == 200 and resp.json().get("success"):
+                log.info("waba.phone_registered", phone_number_id=phone_number_id)
+                return True
+            log.warning(
+                "waba.phone_register_skipped_or_failed",
+                phone_number_id=phone_number_id,
+                status=resp.status_code,
+                body=resp.text[:200],
+            )
+    except Exception as exc:
+        log.warning("waba.phone_register_error", phone_number_id=phone_number_id, error=str(exc))
+    return False
 
 
 async def _subscribe_waba_webhook(waba_id: str, access_token: str) -> bool:
@@ -644,6 +678,11 @@ async def complete_whatsapp_embedded_signup(
             raise HTTPException(status_code=502, detail="Meta did not return an access_token")
 
     webhook_subscribed = await _subscribe_waba_webhook(body.waba_id, access_token)
+    phone_registered = False
+    if not body.is_coexistence:
+        phone_registered = await _register_cloud_api_phone(
+            body.phone_number_id, access_token, pin=body.register_pin
+        )
 
     await db.execute(
         text(
@@ -665,6 +704,8 @@ async def complete_whatsapp_embedded_signup(
         "waba_phone_number_id": body.phone_number_id.strip(),
         "waba_business_account_id": body.waba_id.strip(),
         "webhook_subscribed": webhook_subscribed,
+        "phone_registered": phone_registered,
+        "is_coexistence": body.is_coexistence,
     }
 
 

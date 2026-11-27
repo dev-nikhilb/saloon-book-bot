@@ -18,7 +18,7 @@ from app.database import async_session_factory
 
 logger = structlog.get_logger()
 
-GRAPH_API_VERSION = "v21.0"
+GRAPH_API_VERSION = "v25.0"
 GRAPH_API_BASE = f"https://graph.facebook.com/{GRAPH_API_VERSION}"
 
 
