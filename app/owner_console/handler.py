@@ -419,7 +419,7 @@ async def _cmd_plan(db: AsyncSession, tenant_id: str, business_name: str) -> str
     )
     warn_line = f"\n⚠️ {summary['warning_message']}\n" if summary["warning_message"] else ""
     return (
-        f"💎 *BookBot Plan — {business_name}*\n\n"
+        f"💎 *Tivoria Plan — {business_name}*\n\n"
         f"  Plan: *{summary['plan_tier'].capitalize()}* ({summary['status']})\n"
         f"{days_line}"
         f"  Team: {u['staff']} / {fmt(lim['max_staff'])}\n"

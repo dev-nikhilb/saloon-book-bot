@@ -215,7 +215,7 @@ class OtpRequest(BaseModel):
 
 class SignupOtpRequest(BaseModel):
     email: str = Field(..., min_length=5, max_length=160)
-    business_name: str | None = "BookBot"
+    business_name: str | None = "Tivoria"
 
 
 class PlanUpdateRequest(BaseModel):
@@ -305,7 +305,7 @@ async def request_signup_verification_otp(body: SignupOtpRequest, db: AsyncSessi
     if existing_email.first():
         raise HTTPException(status_code=409, detail="An account with this email already exists. Please sign in.")
 
-    res = await request_signup_otp(db, email, business_name=body.business_name or "BookBot")
+    res = await request_signup_otp(db, email, business_name=body.business_name or "Tivoria")
     if res.get("otp_required") and not res.get("sent") and res.get("delivery_error"):
         raise HTTPException(status_code=502, detail=res["delivery_error"])
     return res

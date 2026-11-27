@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>BookBot Creator Portal</title>
+<title>Tivoria Creator Portal</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Playfair+Display:wght@700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{margin:0;padding:0;box-sizing:border-box}
@@ -161,14 +161,14 @@ td code{font-size:.75rem}
 <!-- MAIN -->
 <div class="main">
 
-<a href="index.html" class="back-link">&larr; Back to BookBot</a>
+<a href="index.html" class="back-link">&larr; Back to Tivoria</a>
 
 <h1>Documentation</h1>
-<p>Everything you need to set up, configure, and run BookBot for your salon business.</p>
+<p>Everything you need to set up, configure, and run Tivoria for your salon business.</p>
 
 <!-- ============================================================ -->
 <h2 id="introduction">Introduction</h2>
-<p>BookBot is a <strong>WhatsApp-first booking platform</strong> for Indian service businesses. Customers book appointments by texting your WhatsApp number. You manage everything via WhatsApp commands or a web dashboard.</p>
+<p>Tivoria is a <strong>WhatsApp-first booking platform</strong> for Indian service businesses. Customers book appointments by texting your WhatsApp number. You manage everything via WhatsApp commands or a web dashboard.</p>
 
 <div class="callout callout-info">
   <div class="callout-icon">&#128161;</div>
@@ -232,7 +232,7 @@ uvicorn app.main:app --reload --port <span class="number">8000</span></pre>
 
 <!-- ============================================================ -->
 <h2 id="whatsapp-setup">WhatsApp Setup</h2>
-<p>Connect your WhatsApp Business number to BookBot.</p>
+<p>Connect your WhatsApp Business number to Tivoria.</p>
 
 <div class="doc-steps">
   <div class="doc-step"><div></div><div class="doc-step-content">
@@ -265,7 +265,7 @@ uvicorn app.main:app --reload --port <span class="number">8000</span></pre>
 
   <div class="doc-step"><div></div><div class="doc-step-content">
     <h4>Configure Webhook</h4>
-    <p>Point Meta to your BookBot server.</p>
+    <p>Point Meta to your Tivoria server.</p>
 <pre><span class="comment"># In Meta Dashboard &rarr; WhatsApp &rarr; Configuration</span>
 
 Callback URL:   <span class="string">https://yourdomain.com/webhooks/whatsapp</span>
@@ -566,7 +566,7 @@ docker-compose -f docker-compose.prod.yml up -d</pre>
 </table>
 
 <div style="margin-top:4rem;padding-top:2rem;border-top:1px solid var(--border);text-align:center;color:var(--ink-muted);font-size:.8125rem">
-  <p>BookBot Documentation &middot; <a href="index.html">Home</a> &middot; <a href="/dashboard/">Dashboard</a></p>
+  <p>Tivoria Documentation &middot; <a href="index.html">Home</a> &middot; <a href="/dashboard/">Dashboard</a></p>
 </div>
 
 </div>

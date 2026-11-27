@@ -83,7 +83,7 @@ async def process_subscription_expiries(db: AsyncSession) -> dict:
     for row in res_3d.fetchall():
         kind = "free trial" if row.status == "trial" else f"{row.plan_tier.capitalize()} subscription"
         msg = (
-            f"⏰ *BookBot Renewal Reminder ({row.business_name})*\n\n"
+            f"⏰ *Tivoria Renewal Reminder ({row.business_name})*\n\n"
             f"Your {kind} ends in *3 days*.\n"
             f"Renew now so WhatsApp & web bookings continue without interruption:\n{renew_url}"
         )
@@ -112,7 +112,7 @@ async def process_subscription_expiries(db: AsyncSession) -> dict:
         kind = "free trial" if row.status == "trial" else f"{row.plan_tier.capitalize()} subscription"
         msg = (
             f"⚠️ *Final Notice — {row.business_name}*\n\n"
-            f"Your BookBot {kind} ends in *less than 24 hours*.\n"
+            f"Your Tivoria {kind} ends in *less than 24 hours*.\n"
             f"Renew here to keep bookings active:\n{renew_url}"
         )
         await _notify_owner_whatsapp(db, row.tenant_id, row.owner_phone, row.waba_phone_number_id, msg)
@@ -135,7 +135,7 @@ async def process_subscription_expiries(db: AsyncSession) -> dict:
     )
     for row in res_trial_exp.fetchall():
         msg = (
-            f"🔴 *BookBot Trial Ended — {row.business_name}*\n\n"
+            f"🔴 *Tivoria Trial Ended — {row.business_name}*\n\n"
             f"Your 14-day free trial has ended. New customer bookings are now paused, "
             f"while your dashboard and existing appointments remain readable.\n\n"
             f"Pick a plan (starting ₹499/mo) to resume immediately:\n{renew_url}"
@@ -191,7 +191,7 @@ async def process_subscription_expiries(db: AsyncSession) -> dict:
     )
     for row in res_grace_exp.fetchall():
         msg = (
-            f"🔴 *BookBot Paused — {row.business_name}*\n\n"
+            f"🔴 *Tivoria Paused — {row.business_name}*\n\n"
             f"Your grace period ended and new bookings are now paused (your dashboard remains available in read-only mode).\n"
             f"Renew anytime to resume immediately:\n{renew_url}"
         )

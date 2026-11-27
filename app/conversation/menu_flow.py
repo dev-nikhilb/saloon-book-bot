@@ -1018,7 +1018,7 @@ async def _handle_confirmation(
                         tenant_id=tenant_id,
                         booking_id=booking["id"],
                         amount_paise=deposit_paise,
-                        business_name=business_name or "BookBot",
+                        business_name=business_name or "Tivoria",
                         customer_phone=customer_phone,
                         deposit_mode=tsettings.get("deposit_mode", "auto"),
                         upi_id=tsettings.get("upi_id"),

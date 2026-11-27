@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<title>BookBot — Dashboard</title>
+<title>Tivoria — Dashboard</title>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <style>
 /* ==========================================================================
@@ -785,7 +785,7 @@ html[data-theme="dark"] .apple-toast { background: rgba(58, 58, 60, 0.92); }
       <svg width="28" height="28" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="18" rx="4"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>
     </div>
     <div style="text-align:center;margin-bottom:1.75rem">
-      <h1 class="t-title" style="margin:0">BookBot</h1>
+      <h1 class="t-title" style="margin:0">Tivoria</h1>
       <p class="t-caption" style="margin:0.35rem 0 0">Sign in to your business workspace</p>
     </div>
 
@@ -821,7 +821,7 @@ html[data-theme="dark"] .apple-toast { background: rgba(58, 58, 60, 0.92); }
     <div class="sidebar-brand">
       <div class="brand-mark" id="brand-mark">B</div>
       <div style="min-width:0;flex:1">
-        <div id="sidebar-business-name" class="t-subhead" style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">BookBot</div>
+        <div id="sidebar-business-name" class="t-subhead" style="font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Tivoria</div>
         <div id="sidebar-vertical-badge" class="t-caption" style="font-size:0.72rem">Workspace</div>
       </div>
     </div>
@@ -1545,7 +1545,7 @@ document.getElementById('login-otp').addEventListener('keydown', (e) => { if (e.
    ========================================================================== */
 function applyBusinessLabels() {
   const L = getLabels();
-  document.getElementById('sidebar-business-name').textContent = state.tenant?.business_name || 'BookBot';
+  document.getElementById('sidebar-business-name').textContent = state.tenant?.business_name || 'Tivoria';
   document.getElementById('sidebar-vertical-badge').textContent = L.name || 'Workspace';
   document.getElementById('brand-mark').textContent = (state.tenant?.business_name || 'B')[0].toUpperCase();
   document.getElementById('header-owner-name').textContent = state.tenant?.owner_name || 'Owner';
@@ -3078,7 +3078,7 @@ function renderSimulator() {
         <div class="sim-screen" style="position:relative;overflow:hidden">
           <div class="sim-head">
             <div>
-              <div style="font-weight:700;font-size:0.9rem">${escHtml(state.tenant?.business_name || 'BookBot')}</div>
+              <div style="font-weight:700;font-size:0.9rem">${escHtml(state.tenant?.business_name || 'Tivoria')}</div>
               <div style="font-size:0.7rem;opacity:0.8" id="sim-subtitle">${state.simMode === 'owner' ? 'Owner Console Mode' : 'Business Account · Live DB'}</div>
             </div>
             <span style="width:8px;height:8px;border-radius:50%;background:#25D366"></span>
@@ -3542,7 +3542,7 @@ async function testWhatsAppConnection() {
 }
 
 async function disconnectWhatsApp() {
-  if (!confirm('Disconnect your WhatsApp Business number from BookBot?')) return;
+  if (!confirm('Disconnect your WhatsApp Business number from Tivoria?')) return;
   try {
     await apiDelete('/tenant/whatsapp');
     state.tenant.waba_phone_number_id = null;
@@ -3986,7 +3986,7 @@ async function switchPlan(tier, skipTrial = false) {
     await loadRazorpayScript();
     const opts = {
       key: res.key_id,
-      name: 'BookBot Subscription',
+      name: 'Tivoria Subscription',
       description: `${tier.toUpperCase()} Plan (${cycle})`,
       handler: async (response) => {
         await apiPost('/billing/verify-payment', {

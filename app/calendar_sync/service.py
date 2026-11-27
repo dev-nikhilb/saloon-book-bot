@@ -117,7 +117,7 @@ async def sync_booking_to_calendar(
         service = build("calendar", "v3", credentials=creds, cache_discovery=False)
         event_body = {
             "summary": f"{row.service_name} — {row.customer_name or row.customer_phone}",
-            "description": f"Booked via BookBot ({row.business_name})\nPhone: {row.customer_phone}"
+            "description": f"Booked via Tivoria ({row.business_name})\nPhone: {row.customer_phone}"
             + (f"\nReason: {row.reason}" if row.reason else ""),
             "start": {"dateTime": row.starts_at.isoformat(), "timeZone": row.timezone or "Asia/Kolkata"},
             "end": {"dateTime": row.ends_at.isoformat(), "timeZone": row.timezone or "Asia/Kolkata"},

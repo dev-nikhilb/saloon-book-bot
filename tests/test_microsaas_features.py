@@ -137,7 +137,7 @@ class TestMultiVerticalAndPublicBooking:
         # Public HTML page served
         html_resp = client.get(f"/book/{clinic['slug']}")
         assert html_resp.status_code == 200
-        assert "BookBot" in html_resp.text
+        assert "Tivoria" in html_resp.text
 
         # Public business profile has clinic vocabulary
         pub_resp = client.get(f"/api/public/business/{clinic['slug']}")

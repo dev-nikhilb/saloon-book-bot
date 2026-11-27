@@ -1248,7 +1248,7 @@ async def razorpay_webhook(
                     db,
                     tid,
                     t_row.owner_phone,
-                    f"✅ *BookBot {tier.capitalize()} Plan Active ({t_row.business_name})*\n"
+                    f"✅ *Tivoria {tier.capitalize()} Plan Active ({t_row.business_name})*\n"
                     "Thank you! Your subscription payment succeeded and all features are unlocked.",
                 )
 

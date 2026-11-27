@@ -60,13 +60,13 @@ def is_email_otp_configured() -> bool:
 
 
 async def _send_email_otp(
-    to_email: str, code: str, business_name: str = "BookBot", purpose: str = "login"
+    to_email: str, code: str, business_name: str = "Tivoria", purpose: str = "login"
 ) -> tuple[str | None, str | None]:
     """Send 6-digit OTP via Resend API or SMTP. Returns (channel_or_none, error_message_or_none)."""
-    subject = f"{code} is your BookBot {'verification' if purpose == 'signup' else 'login'} code"
+    subject = f"{code} is your Tivoria {'verification' if purpose == 'signup' else 'login'} code"
     html_body = (
         f"<div style='font-family:-apple-system,BlinkMacSystemFont,sans-serif;max-width:460px;margin:0 auto;padding:24px'>"
-        f"<h2 style='margin:0 0 8px;color:#1D1D1F'>BookBot Verification Code</h2>"
+        f"<h2 style='margin:0 0 8px;color:#1D1D1F'>Tivoria Verification Code</h2>"
         f"<p style='color:#6E6E73;margin:0 0 20px'>Use this 6-digit code to "
         f"{'verify your new workspace' if purpose == 'signup' else f'sign in to {business_name}'}:</p>"
         f"<div style='font-size:32px;font-weight:700;letter-spacing:6px;padding:16px 24px;"
@@ -74,7 +74,7 @@ async def _send_email_otp(
         f"<p style='color:#86868B;font-size:13px;margin:20px 0 0'>Expires in 5 minutes. If you didn&rsquo;t request this, ignore this email.</p>"
         f"</div>"
     )
-    plain_body = f"Your BookBot code is {code}. Valid for 5 minutes."
+    plain_body = f"Your Tivoria code is {code}. Valid for 5 minutes."
     last_error: str | None = None
 
     # 1. Resend HTTP API (3,000 emails/mo free)
@@ -175,7 +175,7 @@ async def _store_otp(db: AsyncSession | None, identifier: str, code: str, purpos
                 logger.warning("otp_pg_store_failed", error=str(exc))
 
 
-async def request_signup_otp(db: AsyncSession, email: str, business_name: str = "BookBot") -> dict:
+async def request_signup_otp(db: AsyncSession, email: str, business_name: str = "Tivoria") -> dict:
     """Generate and email a 6-digit verification OTP before workspace signup."""
     ident = email.lower().strip()
     code = generate_otp()
@@ -258,7 +258,7 @@ async def request_otp(db: AsyncSession, identifier: str) -> dict:
                 phone_number_id=tenant.waba_phone_number_id,
                 to=tenant.owner_phone.lstrip("+"),
                 text=(
-                    f"🔐 Your BookBot login code for *{tenant.business_name}* is *{code}*.\n"
+                    f"🔐 Your Tivoria login code for *{tenant.business_name}* is *{code}*.\n"
                     f"Valid for 5 minutes. Do not share this code."
                 ),
                 tenant_id=str(tenant.id),

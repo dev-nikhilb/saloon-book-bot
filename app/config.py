@@ -46,11 +46,11 @@ class Settings(BaseSettings):
     # Dashboard
     dashboard_url: str = "http://localhost:8000/dashboard/"
     jwt_secret: str = ""  # falls back to encryption_key if empty
-    base_domain: str = "localhost:8000"  # bookbot.com in production
+    base_domain: str = "localhost:8000"  # tivoria.site in production
 
     # Free Email OTP (Resend API 3,000/mo free OR Gmail/Brevo SMTP 500/day free)
     resend_api_key: str = ""
-    email_from: str = "BookBot <onboarding@resend.dev>"
+    email_from: str = "Tivoria <onboarding@resend.dev>"
     smtp_host: str = ""
     smtp_port: int = 587
     smtp_user: str = ""

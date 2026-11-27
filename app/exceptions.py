@@ -47,7 +47,7 @@ class SubscriptionExpiredError(BookingSaaSError):
     def __init__(self, status: str = "expired", message: str | None = None):
         self.status = status
         self.message = message or (
-            "Your BookBot subscription has expired. Renew your plan in Settings → Billing to resume accepting bookings."
+            "Your Tivoria subscription has expired. Renew your plan in Settings → Billing to resume accepting bookings."
         )
         super().__init__(self.message)
 

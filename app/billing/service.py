@@ -731,7 +731,7 @@ async def create_subscription_checkout(
             {"tid": tenant_id},
         )
     ).first()
-    biz_name = t_row.business_name if t_row else "BookBot Workspace"
+    biz_name = t_row.business_name if t_row else "Tivoria Workspace"
 
     if not is_razorpay_configured():
         summary = await activate_subscription(
