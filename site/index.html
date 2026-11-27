@@ -778,14 +778,71 @@ footer { border-top: 0.5px solid var(--separator); padding: 36px 0 48px; font-si
 .faq-a-inner { padding: 0 22px 18px; font-size: 0.89rem; line-height: 1.6; color: var(--label-secondary); }
 .faq-card.open .faq-a { max-height: 280px; }
 
-/* Signup 3-Step Pills */
-.signup-steps-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
-.signup-step-chip {
-  font-size: 0.73rem; font-weight: 600; padding: 4px 10px; border-radius: 99px;
-  background: var(--surface-secondary); color: var(--label-secondary);
+/* 4-Step Apple Guided Signup Wizard */
+.wiz-shell {
+  max-width: 860px; margin: 0 auto;
+  background: var(--surface); border: 0.5px solid var(--hairline); border-radius: var(--radius-xl);
+  box-shadow: var(--shadow-float); overflow: hidden;
 }
-.signup-step-chip.active { background: var(--blue-soft); color: var(--blue); }
-.signup-step-chip.done { background: var(--green-soft); color: var(--green-text); }
+.wiz-progress-track { height: 3px; background: var(--surface-secondary); width: 100%; }
+.wiz-progress-bar { height: 100%; background: var(--blue); width: 25%; transition: width 280ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+.wiz-head {
+  padding: 24px 32px 18px; border-bottom: 0.5px solid var(--hairline);
+  display: flex; flex-direction: column; gap: 14px;
+}
+@media (max-width: 640px) { .wiz-head { padding: 18px 18px 14px; } }
+.wiz-steps { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+@media (max-width: 640px) { .wiz-steps { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.wiz-step-btn {
+  border: 0.5px solid var(--hairline); background: var(--surface-secondary); border-radius: 12px;
+  padding: 9px 11px; display: flex; align-items: center; gap: 8px; cursor: pointer;
+  text-align: left; transition: all 160ms ease; color: var(--label-secondary);
+}
+.wiz-step-btn:active { transform: scale(0.98); }
+.wiz-step-btn.active { background: var(--blue-soft); border-color: rgba(0,122,255,0.45); color: var(--blue); }
+.wiz-step-btn.done { background: var(--green-soft); border-color: rgba(40,205,65,0.35); color: var(--green-text); }
+.wiz-step-dot {
+  width: 22px; height: 22px; border-radius: 50%; font-size: 0.72rem; font-weight: 700;
+  display: grid; place-items: center; flex-shrink: 0; background: var(--surface); color: inherit;
+}
+.wiz-step-label { font-size: 0.78rem; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wiz-body { padding: 28px 32px 32px; }
+@media (max-width: 640px) { .wiz-body { padding: 20px 18px 24px; } }
+.wiz-pane { display: none; animation: wizIn 220ms cubic-bezier(0.2, 0.8, 0.2, 1); }
+.wiz-pane.active { display: flex; flex-direction: column; gap: 18px; }
+@keyframes wizIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+.wiz-title { font-size: 1.35rem; font-weight: 700; letter-spacing: -0.025em; margin: 0; }
+.wiz-sub { font-size: 0.88rem; color: var(--label-secondary); margin: 4px 0 0; }
+.vtype-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 9px; }
+@media (max-width: 560px) { .vtype-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.vtype-card {
+  border: 0.5px solid var(--separator); background: var(--surface-secondary); border-radius: 13px;
+  padding: 11px 12px; display: flex; align-items: center; gap: 9px; cursor: pointer;
+  font-size: 0.84rem; font-weight: 600; color: var(--label); transition: all 140ms ease;
+}
+.vtype-card:active { transform: scale(0.97); }
+.vtype-card.active { background: var(--blue-soft); border: 1.5px solid var(--blue); color: var(--blue); }
+.wiz-plan-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+@media (max-width: 720px) { .wiz-plan-grid { grid-template-columns: 1fr; } }
+.wiz-plan-card {
+  border: 0.5px solid var(--separator); background: var(--surface-secondary); border-radius: 16px;
+  padding: 16px; cursor: pointer; text-align: left; display: flex; flex-direction: column; gap: 10px;
+  transition: all 150ms ease; position: relative;
+}
+.wiz-plan-card:active { transform: scale(0.985); }
+.wiz-plan-card.active { background: var(--surface); border: 1.8px solid var(--blue); box-shadow: 0 8px 24px rgba(0,122,255,0.14); }
+.wiz-review-grid {
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px;
+  padding: 16px; border-radius: 16px; background: var(--surface-secondary); border: 0.5px solid var(--hairline);
+}
+@media (max-width: 560px) { .wiz-review-grid { grid-template-columns: 1fr; } }
+.wiz-rev-item { background: var(--surface); padding: 10px 12px; border-radius: 11px; border: 0.5px solid var(--hairline); }
+.wiz-rev-item .k { font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--label-tertiary); }
+.wiz-rev-item .v { font-size: 0.88rem; font-weight: 600; margin-top: 2px; word-break: break-word; }
+.wiz-foot {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  padding-top: 16px; border-top: 0.5px solid var(--hairline); margin-top: 6px;
+}
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
@@ -1165,89 +1222,171 @@ footer { border-top: 0.5px solid var(--separator); padding: 36px 0 48px; font-si
     </div>
   </section>
 
-  <!-- SELF-SERVE SIGNUP WITH INTEGRATED PLAN PICKER & EMAIL OTP -->
+  <!-- GUIDED 4-STEP APPLE ONBOARDING & SIGNUP WIZARD -->
   <section id="signup">
     <div class="container">
-      <div class="signup-shell" style="align-items:start">
-        <div>
-          <div class="sec-kicker">Step 1 &middot; Pick your plan &amp; start free</div>
-          <h2 class="t-section" style="font-size:clamp(1.65rem,3vw,2.2rem)">14-day free trial.<br>₹0 due today.</h2>
-          <p class="t-lead" style="margin-top:10px;font-size:0.98rem">
-            Switch plans anytime during your 14-day trial without losing your remaining trial days.
-          </p>
+      <div class="sec-head" style="text-align:center;margin-left:auto;margin-right:auto;margin-bottom:32px">
+        <div class="sec-kicker">Start Your 14-Day Free Trial &middot; ₹0 Due Today</div>
+        <h2 class="t-section">Launch your WhatsApp receptionist in 4 quick steps.</h2>
+        <p class="t-lead" style="margin-left:auto;margin-right:auto">No credit card required. Starter services, hours, and booking link are ready the second you finish.</p>
+      </div>
 
-          <!-- Interactive Plan Pills synced with Pricing -->
-          <div id="signupPlanPills" style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:20px"></div>
-
-          <!-- Dynamic "What You Get" Card for Selected Plan -->
-          <div id="signupPlanSummary" style="margin-top:14px;padding:18px;border-radius:16px;background:var(--surface-secondary);border:0.5px solid var(--hairline)"></div>
+      <div class="wiz-shell">
+        <div class="wiz-progress-track"><div class="wiz-progress-bar" id="wizProgress"></div></div>
+        <div class="wiz-head">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px">
+            <span style="font-size:0.75rem;font-weight:600;color:var(--label-secondary)" id="wizStepCounter">Step 1 of 4</span>
+            <button type="button" id="wizPlanBadge" onclick="goSignupStep(currentSignupStep >= 3 ? 3 : currentSignupStep)" style="border:0.5px solid rgba(0,122,255,0.22);background:var(--blue-soft);color:var(--blue);font-size:0.74rem;font-weight:600;padding:4px 10px;border-radius:999px;cursor:pointer">
+              14-Day Free Trial · Growth
+            </button>
+          </div>
+          <div class="wiz-steps" role="tablist" aria-label="Signup steps">
+            <button type="button" class="wiz-step-btn active" data-step="1" onclick="goSignupStep(1)"><span class="wiz-step-dot" id="wDot1">1</span><span class="wiz-step-label">Your Business</span></button>
+            <button type="button" class="wiz-step-btn" data-step="2" onclick="goSignupStep(2)"><span class="wiz-step-dot" id="wDot2">2</span><span class="wiz-step-label">Reception &amp; Contact</span></button>
+            <button type="button" class="wiz-step-btn" data-step="3" onclick="goSignupStep(3)"><span class="wiz-step-dot" id="wDot3">3</span><span class="wiz-step-label">Choose Plan</span></button>
+            <button type="button" class="wiz-step-btn" data-step="4" onclick="goSignupStep(4)"><span class="wiz-step-dot" id="wDot4">4</span><span class="wiz-step-label">Review &amp; Launch</span></button>
+          </div>
         </div>
 
-        <form class="form-grid" id="signupForm">
-          <div class="signup-steps-bar" id="signupStepsBar">
-            <span class="signup-step-chip done">✓ 1. Plan</span>
-            <span class="signup-step-chip active" id="stChip2">2. Business Details</span>
-            <span class="signup-step-chip" id="stChip3">3. Verify &amp; Launch</span>
-          </div>
-          <div class="field-row">
-            <div class="field">
-              <label for="sName">Business Name</label>
-              <input id="sName" required minlength="2" placeholder="e.g. Glow Studio Salon">
+        <form class="wiz-body" id="signupForm" novalidate>
+          <!-- STEP 1: YOUR BUSINESS -->
+          <div class="wiz-pane active" data-pane="1">
+            <div>
+              <h3 class="wiz-title">1. Tell us about your business</h3>
+              <p class="wiz-sub">We&rsquo;ll pre-load matching services, slot durations, and terminology for your industry.</p>
+            </div>
+            <div>
+              <label style="display:block;font-size:0.78rem;font-weight:600;color:var(--label-secondary);margin-bottom:8px">Pick your industry</label>
+              <div class="vtype-grid" id="vtypeGrid">
+                <button type="button" class="vtype-card active" data-vtype="salon"><span>💇</span><span>Hair &amp; Beauty Salon</span></button>
+                <button type="button" class="vtype-card" data-vtype="barbershop"><span>💈</span><span>Barbershop</span></button>
+                <button type="button" class="vtype-card" data-vtype="clinic"><span>🏥</span><span>Medical Clinic</span></button>
+                <button type="button" class="vtype-card" data-vtype="dental"><span>🦷</span><span>Dental Clinic</span></button>
+                <button type="button" class="vtype-card" data-vtype="spa"><span>🧖</span><span>Spa &amp; Wellness</span></button>
+                <button type="button" class="vtype-card" data-vtype="fitness"><span>🏋️</span><span>Fitness &amp; Yoga</span></button>
+              </div>
+              <div class="field" style="margin-top:10px">
+                <label for="sType">Or choose from all 12 supported verticals</label>
+                <select id="sType">
+                  <option value="salon">Hair &amp; Beauty Salon</option>
+                  <option value="barbershop">Barbershop</option>
+                  <option value="beauty_parlour">Beauty Parlour</option>
+                  <option value="clinic">Medical Clinic</option>
+                  <option value="dental">Dental Clinic</option>
+                  <option value="spa">Spa &amp; Wellness</option>
+                  <option value="fitness">Fitness &amp; Yoga Studio</option>
+                  <option value="tutor">Tutor &amp; Coaching</option>
+                  <option value="consulting">Consulting / CA / Legal</option>
+                  <option value="diagnostics">Diagnostics &amp; Pathology</option>
+                  <option value="veterinary">Veterinary Clinic</option>
+                  <option value="home_services">Home Services</option>
+                </select>
+              </div>
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label for="sName">Business Name *</label>
+                <input id="sName" required minlength="2" placeholder="e.g. Glow Studio Salon">
+              </div>
+              <div class="field">
+                <label for="sOwner">Owner / Your Name *</label>
+                <input id="sOwner" required minlength="2" placeholder="e.g. Priya Sharma">
+              </div>
             </div>
             <div class="field">
-              <label for="sOwner">Your Name</label>
-              <input id="sOwner" required minlength="2" placeholder="e.g. Priya Sharma">
-            </div>
-          </div>
-          <div class="field-row">
-            <div class="field">
-              <label for="sEmail">Owner Email (for OTP &amp; Invoices)</label>
-              <input id="sEmail" required type="email" placeholder="owner@business.in">
-            </div>
-            <div class="field">
-              <label for="sPhone">Owner WhatsApp Number</label>
-              <input id="sPhone" required type="tel" placeholder="+91 98765 43210">
-            </div>
-          </div>
-          <div class="field-row">
-            <div class="field">
-              <label for="sType">Business Type</label>
-              <select id="sType">
-                <option value="salon">Hair &amp; Beauty Salon</option>
-                <option value="barbershop">Barbershop</option>
-                <option value="beauty_parlour">Beauty Parlour</option>
-                <option value="clinic">Medical Clinic</option>
-                <option value="dental">Dental Clinic</option>
-                <option value="spa">Spa &amp; Wellness</option>
-                <option value="fitness">Fitness &amp; Yoga Studio</option>
-                <option value="tutor">Tutor &amp; Coaching</option>
-                <option value="consulting">Consulting / CA / Legal</option>
-                <option value="diagnostics">Diagnostics &amp; Pathology</option>
-                <option value="veterinary">Veterinary Clinic</option>
-                <option value="home_services">Home Services</option>
-              </select>
-            </div>
-            <div class="field">
-              <label for="sSlug">Public Booking Link</label>
+              <label for="sSlug">Your Public Booking Link *</label>
               <input id="sSlug" required minlength="2" maxlength="30" pattern="[a-z0-9][a-z0-9-]*[a-z0-9]" placeholder="glow-studio">
+              <div class="slug-hint" id="slugPreview">saloon-book-bot.vercel.app/book/glow-studio</div>
+            </div>
+            <div class="wiz-foot">
+              <span style="font-size:0.8rem;color:var(--label-secondary)">Already registered? <a href="/dashboard/" style="color:var(--blue);font-weight:600">Sign in &rarr;</a></span>
+              <button type="button" class="btn btn-primary" onclick="nextSignupStep(2)">Continue to Reception &rarr;</button>
             </div>
           </div>
-          <div class="slug-hint" id="slugPreview" style="margin-top:-6px">saloon-book-bot.vercel.app/book/glow-studio</div>
 
-          <!-- Inline 6-digit Email OTP step (auto-shown when Email OTP provider is configured) -->
-          <div id="signupOtpBox" class="field" style="display:none;padding:14px;border-radius:14px;background:var(--blue-soft);border:0.5px solid rgba(0,122,255,0.28)">
-            <label for="sOtp" style="color:var(--blue)">Enter 6-Digit Email Verification Code</label>
-            <input id="sOtp" type="text" inputmode="numeric" maxlength="6" placeholder="123456" style="letter-spacing:0.25em;font-weight:700;text-align:center;background:var(--surface)">
-            <div id="signupOtpHint" style="font-size:0.75rem;color:var(--label-secondary);margin-top:6px">Check your inbox for your 6-digit BookBot verification code.</div>
+          <!-- STEP 2: CONTACT & RECEPTION -->
+          <div class="wiz-pane" data-pane="2">
+            <div>
+              <h3 class="wiz-title">2. Owner contact &amp; WhatsApp reception</h3>
+              <p class="wiz-sub">Where we send login codes, UPI verification alerts, and how your bot greets customers.</p>
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label for="sPhone">Owner WhatsApp Number *</label>
+                <input id="sPhone" required type="tel" placeholder="+91 98765 43210">
+              </div>
+              <div class="field">
+                <label for="sEmail">Owner Email (for OTP &amp; Invoices) *</label>
+                <input id="sEmail" required type="email" placeholder="owner@business.in">
+              </div>
+            </div>
+            <div class="field-row">
+              <div class="field">
+                <label for="sLang">Customer Bot Language</label>
+                <select id="sLang">
+                  <option value="en">English</option>
+                  <option value="hi">Hindi (हिन्दी)</option>
+                  <option value="ta">Tamil (தமிழ்)</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="sMaps">Google Maps Link (optional — sent on confirmation)</label>
+                <input id="sMaps" type="url" placeholder="https://maps.app.goo.gl/...">
+              </div>
+            </div>
+            <div class="field">
+              <label for="sWelcome">Custom WhatsApp Welcome Greeting (optional)</label>
+              <input id="sWelcome" placeholder="e.g. Welcome to Glow Studio! Tap below to pick a service and time.">
+            </div>
+            <div class="wiz-foot">
+              <button type="button" class="btn btn-secondary" onclick="goSignupStep(1)">&larr; Back</button>
+              <button type="button" class="btn btn-primary" onclick="nextSignupStep(3)">Continue to Plans &rarr;</button>
+            </div>
           </div>
 
-          <div id="signupMsg" class="form-msg"></div>
-          <button type="submit" id="signupBtn" class="btn btn-primary" style="width:100%;padding:13px 22px">
-            Start 14-Day Free Trial &rarr;
-          </button>
-          <div style="text-align:center;font-size:0.8rem;color:var(--label-secondary)">
-            Already registered? <a href="/dashboard/" style="color:var(--blue);font-weight:600">Sign in to Dashboard</a>
+          <!-- STEP 3: CHOOSE PLAN -->
+          <div class="wiz-pane" data-pane="3">
+            <div style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:12px">
+              <div>
+                <h3 class="wiz-title">3. Pick your 14-day free trial plan</h3>
+                <p class="wiz-sub">₹0 due today. Switch between Solo, Growth, or Pro anytime without losing trial days.</p>
+              </div>
+              <div class="segmented" id="wizBillingSwitch" style="padding:2px">
+                <button type="button" class="active" data-cycle="monthly" onclick="setBillingCycle('monthly')">Monthly</button>
+                <button type="button" data-cycle="annual" onclick="setBillingCycle('annual')">Annual (2 mo free)</button>
+              </div>
+            </div>
+            <div class="wiz-plan-grid" id="wizPlanGrid"></div>
+            <div class="wiz-foot">
+              <button type="button" class="btn btn-secondary" onclick="goSignupStep(2)">&larr; Back</button>
+              <button type="button" class="btn btn-primary" onclick="nextSignupStep(4)">Review &amp; Launch &rarr;</button>
+            </div>
           </div>
+
+          <!-- STEP 4: REVIEW, VERIFY EMAIL & LAUNCH -->
+          <div class="wiz-pane" data-pane="4">
+            <div>
+              <h3 class="wiz-title">4. Review &amp; launch your workspace</h3>
+              <p class="wiz-sub">Double-check your details below. Everything can be edited anytime inside your Dashboard.</p>
+            </div>
+            <div class="wiz-review-grid" id="wizReviewGrid"></div>
+
+            <!-- Inline 6-digit Email OTP step (auto-shown when Email OTP provider is configured) -->
+            <div id="signupOtpBox" class="field" style="display:none;padding:16px;border-radius:14px;background:var(--blue-soft);border:0.5px solid rgba(0,122,255,0.28)">
+              <label for="sOtp" style="color:var(--blue)">Enter 6-Digit Email Verification Code</label>
+              <input id="sOtp" type="text" inputmode="numeric" maxlength="6" placeholder="123456" style="letter-spacing:0.28em;font-weight:700;font-size:1.15rem;text-align:center;background:var(--surface)">
+              <div id="signupOtpHint" style="font-size:0.78rem;color:var(--label-secondary);margin-top:6px">Check your inbox for your 6-digit BookBot verification code.</div>
+            </div>
+
+            <div class="wiz-foot">
+              <button type="button" class="btn btn-secondary" onclick="goSignupStep(3)">&larr; Change Plan</button>
+              <button type="submit" id="signupBtn" class="btn btn-primary" style="padding:13px 26px">
+                Launch 14-Day Free Trial &rarr;
+              </button>
+            </div>
+          </div>
+
+          <div id="signupMsg" class="form-msg" style="margin-top:12px"></div>
         </form>
       </div>
     </div>
@@ -2007,8 +2146,7 @@ function renderVerticals(activeId = 'salon') {
     btn.innerHTML = `<span class="v-name">${v.name}</span><span class="v-role">${v.staff} &middot; ${v.customer}</span>`;
     btn.addEventListener('click', () => {
       renderVerticals(v.id);
-      const sel = document.getElementById('sType');
-      if (sel) sel.value = v.id;
+      if (typeof selectBusinessType === 'function') selectBusinessType(v.id);
     });
     grid.appendChild(btn);
   });
@@ -2039,7 +2177,7 @@ function renderVerticals(activeId = 'salon') {
     <div>
       <div class="vp-url">
         <span>saloon-book-bot.vercel.app/book/${active.slug}</span>
-        <a href="#signup" onclick="document.getElementById('sType').value='${active.id}'" style="color:var(--blue);font-weight:600;font-family:inherit;white-space:nowrap">Use Template &rarr;</a>
+        <a href="#signup" onclick="selectBusinessType('${active.id}')" style="color:var(--blue);font-weight:600;font-family:inherit;white-space:nowrap">Use Template &rarr;</a>
       </div>
     </div>
   `;
@@ -2095,45 +2233,159 @@ function renderPlansUI() {
     }).join('');
   }
 
-  const pills = document.getElementById('signupPlanPills');
-  if (pills) {
-    pills.innerHTML = PLANS_DATA.map((p) => {
+  const wizGrid = document.getElementById('wizPlanGrid');
+  if (wizGrid) {
+    const fmtLim = (v) => v == null ? 'Unlimited' : v;
+    wizGrid.innerHTML = PLANS_DATA.map((p) => {
       const active = p.tier === selectedPlanTier;
       const price = isAnnual ? Math.round(p.price_annual_inr / 12) : p.price_monthly_inr;
+      const subTxt = isAnnual ? `${fmtInr(p.price_annual_inr)}/yr` : 'Billed monthly';
       return `
-        <button type="button" onclick="pickSignupPlan('${p.tier}', false)"
-          style="padding:10px 8px;border-radius:12px;cursor:pointer;text-align:center;transition:all 150ms ease;
-          background:${active ? 'var(--blue-soft)' : 'var(--surface-secondary)'};
-          border:${active ? '1.5px solid var(--blue)' : '0.5px solid var(--hairline)'}">
-          <div style="font-size:0.84rem;font-weight:700;color:${active ? 'var(--blue)' : 'var(--label)'}">${esc(p.name)}</div>
-          <div class="t-num" style="font-size:0.75rem;color:var(--label-secondary);margin-top:2px">${fmtInr(price)}/mo</div>
+        <button type="button" class="wiz-plan-card ${active ? 'active' : ''}" onclick="pickSignupPlan('${p.tier}', false)">
+          <div style="display:flex;justify-content:space-between;align-items:center;width:100%">
+            <strong style="font-size:1rem;color:${active ? 'var(--blue)' : 'var(--label)'}">${esc(p.name)}</strong>
+            ${p.tier === 'growth' ? '<span class="pill-mini info">Popular</span>' : (active ? '<span class="pill-mini ok">Selected</span>' : '')}
+          </div>
+          <div>
+            <span class="t-num" style="font-size:1.6rem;font-weight:700;letter-spacing:-0.03em">${fmtInr(price)}</span>
+            <span style="font-size:0.78rem;color:var(--label-secondary)">/mo</span>
+            <div style="font-size:0.72rem;color:var(--label-tertiary)">${subTxt} · ₹0 for 14 days</div>
+          </div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap;font-size:0.72rem;color:var(--label-secondary)">
+            <span style="padding:2px 7px;border-radius:7px;background:var(--surface)">${fmtLim(p.max_staff)} staff</span>
+            <span style="padding:2px 7px;border-radius:7px;background:var(--surface)">${fmtLim(p.max_branches)} branch${p.max_branches === 1 ? '' : 'es'}</span>
+            <span style="padding:2px 7px;border-radius:7px;background:var(--surface)">${fmtLim(p.max_monthly_bookings)}/mo</span>
+          </div>
+          <ul style="list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:4px;font-size:0.75rem;color:var(--label-secondary)">
+            ${(p.features || []).slice(0, 4).map((ft) => `<li><span style="color:var(--green-text);font-weight:700">✓</span> ${esc(ft)}</li>`).join('')}
+          </ul>
         </button>`;
     }).join('');
   }
 
-  const summary = document.getElementById('signupPlanSummary');
-  const chosen = PLANS_DATA.find((p) => p.tier === selectedPlanTier) || PLANS_DATA[1];
-  if (summary && chosen) {
-    const afterPrice = isAnnual ? `${fmtInr(chosen.price_annual_inr)}/yr` : `${fmtInr(chosen.price_monthly_inr)}/mo`;
-    const fmtLim = (v) => v == null ? 'Unlimited' : v;
-    summary.innerHTML = `
-      <div style="display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:10px">
-        <strong style="font-size:0.95rem">${esc(chosen.name)} Plan · 14-Day Free Trial</strong>
-        <span style="font-size:0.74rem;font-weight:600;padding:3px 9px;border-radius:99px;background:var(--green-soft);color:var(--green-text)">₹0 today</span>
-      </div>
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px;text-align:center">
-        <div style="padding:8px 4px;border-radius:10px;background:var(--surface)"><div class="t-num" style="font-weight:700;font-size:0.92rem">${fmtLim(chosen.max_staff)}</div><div style="font-size:0.68rem;color:var(--label-secondary)">Team</div></div>
-        <div style="padding:8px 4px;border-radius:10px;background:var(--surface)"><div class="t-num" style="font-weight:700;font-size:0.92rem">${fmtLim(chosen.max_branches)}</div><div style="font-size:0.68rem;color:var(--label-secondary)">Branches</div></div>
-        <div style="padding:8px 4px;border-radius:10px;background:var(--surface)"><div class="t-num" style="font-weight:700;font-size:0.92rem">${fmtLim(chosen.max_monthly_bookings)}</div><div style="font-size:0.68rem;color:var(--label-secondary)">Bookings/mo</div></div>
-      </div>
-      <ul style="list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:6px;font-size:0.81rem;color:var(--label-secondary)">
-        ${(chosen.features || []).map((ft) => `<li style="display:flex;gap:7px"><span style="color:var(--green-text);font-weight:700">✓</span><span>${esc(ft)}</span></li>`).join('')}
-      </ul>
-      <div style="margin-top:12px;padding-top:10px;border-top:0.5px solid var(--hairline);font-size:0.75rem;color:var(--label-tertiary)">
-        After 14 days: <strong>${afterPrice}</strong> (only if you choose to subscribe).
-      </div>`;
+  document.querySelectorAll('#wizBillingSwitch button').forEach((b) => {
+    b.classList.toggle('active', b.dataset.cycle === selectedBillingCycle);
+  });
+  const chosenPlan = PLANS_DATA.find((p) => p.tier === selectedPlanTier) || PLANS_DATA[1];
+  const badge = document.getElementById('wizPlanBadge');
+  if (badge && chosenPlan) {
+    const pPrice = isAnnual ? `${fmtInr(Math.round(chosenPlan.price_annual_inr / 12))}/mo` : `${fmtInr(chosenPlan.price_monthly_inr)}/mo`;
+    badge.textContent = `14-Day Free Trial · ${chosenPlan.name} (${pPrice} after)`;
   }
+  if (typeof renderWizardReview === 'function') renderWizardReview();
 }
+
+/* ── 4-Step Guided Signup Wizard Controller ── */
+let currentSignupStep = 1;
+const VTYPE_NAMES = {
+  salon: 'Hair & Beauty Salon', barbershop: 'Barbershop', beauty_parlour: 'Beauty Parlour',
+  clinic: 'Medical Clinic', dental: 'Dental Clinic', spa: 'Spa & Wellness',
+  fitness: 'Fitness & Yoga Studio', tutor: 'Tutor & Coaching', consulting: 'Consulting / CA / Legal',
+  diagnostics: 'Diagnostics & Pathology', veterinary: 'Veterinary Clinic', home_services: 'Home Services',
+};
+const LANG_NAMES = { en: 'English', hi: 'Hindi (हिन्दी)', ta: 'Tamil (தமிழ்)' };
+
+function showSignupError(text) {
+  const msg = document.getElementById('signupMsg');
+  if (!msg) return;
+  if (!text) { msg.className = 'form-msg'; msg.textContent = ''; return; }
+  msg.textContent = text;
+  msg.className = 'form-msg show err';
+}
+
+function validateSignupStep(step) {
+  showSignupError('');
+  if (step === 1) {
+    const biz = document.getElementById('sName')?.value.trim() || '';
+    const own = document.getElementById('sOwner')?.value.trim() || '';
+    const slug = slugify(document.getElementById('sSlug')?.value || biz);
+    if (biz.length < 2) { showSignupError('Please enter your Business Name (at least 2 characters).'); document.getElementById('sName')?.focus(); return false; }
+    if (own.length < 2) { showSignupError('Please enter your name.'); document.getElementById('sOwner')?.focus(); return false; }
+    if (slug.length < 2) { showSignupError('Please enter a valid Public Booking Link (letters/numbers only).'); document.getElementById('sSlug')?.focus(); return false; }
+  }
+  if (step === 2) {
+    const phone = (document.getElementById('sPhone')?.value || '').replace(/[\s\-()]/g, '');
+    const email = (document.getElementById('sEmail')?.value || '').trim();
+    if (phone.length < 10) { showSignupError('Please enter a valid 10-digit WhatsApp mobile number.'); document.getElementById('sPhone')?.focus(); return false; }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { showSignupError('Please enter a valid Owner Email address.'); document.getElementById('sEmail')?.focus(); return false; }
+  }
+  return true;
+}
+
+function renderWizardReview() {
+  const rev = document.getElementById('wizReviewGrid');
+  if (!rev) return;
+  const biz = document.getElementById('sName')?.value.trim() || '—';
+  const own = document.getElementById('sOwner')?.value.trim() || '—';
+  const vtype = document.getElementById('sType')?.value || 'salon';
+  const slug = slugify(document.getElementById('sSlug')?.value || biz) || 'your-business';
+  const phone = document.getElementById('sPhone')?.value.trim() || '—';
+  const email = document.getElementById('sEmail')?.value.trim() || '—';
+  const lang = document.getElementById('sLang')?.value || 'en';
+  const chosen = PLANS_DATA.find((p) => p.tier === selectedPlanTier) || PLANS_DATA[1];
+  const price = selectedBillingCycle === 'annual' ? `${fmtInr(chosen.price_annual_inr)}/yr` : `${fmtInr(chosen.price_monthly_inr)}/mo`;
+
+  rev.innerHTML = `
+    <div class="wiz-rev-item"><div class="k">Business &amp; Industry</div><div class="v">${esc(biz)} · ${esc(VTYPE_NAMES[vtype] || vtype)}</div></div>
+    <div class="wiz-rev-item"><div class="k">Owner &amp; Booking Link</div><div class="v">${esc(own)} · <span style="font-family:ui-monospace,monospace;font-size:0.78rem">/book/${esc(slug)}</span></div></div>
+    <div class="wiz-rev-item"><div class="k">WhatsApp &amp; Email</div><div class="v">${esc(phone)} · ${esc(email)}</div></div>
+    <div class="wiz-rev-item"><div class="k">Selected Plan · Language</div><div class="v" style="color:var(--blue)">${esc(chosen.name)} (14-Day Free Trial, then ${price}) · ${esc(LANG_NAMES[lang] || lang)}</div></div>`;
+}
+
+function goSignupStep(step) {
+  if (step > currentSignupStep) {
+    for (let s = currentSignupStep; s < step; s++) {
+      if (!validateSignupStep(s)) return;
+    }
+  }
+  showSignupError('');
+  currentSignupStep = step;
+  const bar = document.getElementById('wizProgress');
+  if (bar) bar.style.width = `${step * 25}%`;
+  const counter = document.getElementById('wizStepCounter');
+  if (counter) counter.textContent = `Step ${step} of 4`;
+  document.querySelectorAll('.wiz-pane').forEach((p) => p.classList.toggle('active', Number(p.dataset.pane) === step));
+  document.querySelectorAll('.wiz-step-btn').forEach((b) => {
+    const n = Number(b.dataset.step);
+    b.classList.toggle('active', n === step);
+    b.classList.toggle('done', n < step);
+    const dot = document.getElementById(`wDot${n}`);
+    if (dot) dot.textContent = n < step ? '✓' : String(n);
+  });
+  if (step === 3) renderPlansUI();
+  if (step === 4) renderWizardReview();
+}
+
+function nextSignupStep(target) {
+  goSignupStep(target);
+}
+
+function selectBusinessType(vtype) {
+  const sel = document.getElementById('sType');
+  if (sel) sel.value = vtype;
+  document.querySelectorAll('#vtypeGrid .vtype-card').forEach((b) => {
+    b.classList.toggle('active', b.dataset.vtype === vtype);
+  });
+}
+
+// Sync Industry Quick-Picker Cards <-> Select Dropdown
+document.querySelectorAll('#vtypeGrid .vtype-card').forEach((btn) => {
+  btn.addEventListener('click', () => selectBusinessType(btn.dataset.vtype));
+});
+document.getElementById('sType')?.addEventListener('change', (e) => selectBusinessType(e.target.value));
+
+// Reset OTP step if owner changes their email address
+document.getElementById('sEmail')?.addEventListener('input', () => {
+  if (signupOtpStepActive) {
+    signupOtpStepActive = false;
+    const otpBox = document.getElementById('signupOtpBox');
+    if (otpBox) otpBox.style.display = 'none';
+    const otpInput = document.getElementById('sOtp');
+    if (otpInput) otpInput.value = '';
+    const btn = document.getElementById('signupBtn');
+    if (btn) btn.textContent = 'Launch 14-Day Free Trial →';
+  }
+});
 
 function pickSignupPlan(tier, scroll = false) {
   selectedPlanTier = tier;
@@ -2192,6 +2444,14 @@ sSlugEl.addEventListener('input', () => {
 
 document.getElementById('signupForm').addEventListener('submit', async (e) => {
   e.preventDefault();
+  // Pressing Enter on Steps 1–3 advances cleanly to the next wizard step
+  if (currentSignupStep < 4) {
+    nextSignupStep(currentSignupStep + 1);
+    return;
+  }
+  if (!validateSignupStep(1)) { goSignupStep(1); return; }
+  if (!validateSignupStep(2)) { goSignupStep(2); return; }
+
   const btn = document.getElementById('signupBtn');
   const msg = document.getElementById('signupMsg');
   msg.className = 'form-msg';
@@ -2199,6 +2459,7 @@ document.getElementById('signupForm').addEventListener('submit', async (e) => {
   const slug = slugify(sSlugEl.value || sNameEl.value);
   const email = document.getElementById('sEmail').value.trim().toLowerCase();
   if (slug.length < 2) {
+    goSignupStep(1);
     msg.textContent = 'Please enter a valid booking link slug (at least 2 letters/numbers).';
     msg.className = 'form-msg show err';
     return;
@@ -2221,10 +2482,6 @@ document.getElementById('signupForm').addEventListener('submit', async (e) => {
       }
       if (otpData.otp_required) {
         signupOtpStepActive = true;
-        const c2 = document.getElementById('stChip2');
-        const c3 = document.getElementById('stChip3');
-        if (c2) { c2.classList.remove('active'); c2.classList.add('done'); c2.textContent = '✓ 2. Business Details'; }
-        if (c3) { c3.classList.add('active'); }
         document.getElementById('signupOtpBox').style.display = 'block';
         if (otpData.dev_otp) {
           document.getElementById('sOtp').value = otpData.dev_otp;
@@ -2267,6 +2524,22 @@ document.getElementById('signupForm').addEventListener('submit', async (e) => {
     }
     if (data.access_token) {
       localStorage.setItem('dashboard_token', data.access_token);
+      // Persist optional Step 2 language, welcome greeting & Google Maps link cleanly
+      const langVal = document.getElementById('sLang')?.value || 'en';
+      const welcomeVal = (document.getElementById('sWelcome')?.value || '').trim();
+      const mapsVal = (document.getElementById('sMaps')?.value || '').trim();
+      const authH = { 'Content-Type': 'application/json', 'Authorization': `Bearer ${data.access_token}` };
+      const postTasks = [];
+      if (langVal && langVal !== 'en') {
+        postTasks.push(fetch('/api/tenant', { method: 'PUT', headers: authH, body: JSON.stringify({ primary_language: langVal }) }).catch(() => {}));
+      }
+      if (welcomeVal || mapsVal) {
+        const sBody = {};
+        if (welcomeVal) sBody.welcome_message = welcomeVal;
+        if (mapsVal) sBody.google_maps_url = mapsVal;
+        postTasks.push(fetch('/api/tenant/settings', { method: 'PUT', headers: authH, body: JSON.stringify(sBody) }).catch(() => {}));
+      }
+      if (postTasks.length) await Promise.all(postTasks);
     }
     msg.textContent = 'Workspace created! Opening your dashboard…';
     msg.className = 'form-msg show ok';
@@ -2275,7 +2548,7 @@ document.getElementById('signupForm').addEventListener('submit', async (e) => {
     msg.textContent = err.message;
     msg.className = 'form-msg show err';
     btn.disabled = false;
-    btn.textContent = signupOtpStepActive ? 'Verify Code & Create Workspace →' : 'Start 14-Day Free Trial →';
+    btn.textContent = signupOtpStepActive ? 'Verify Code & Create Workspace →' : 'Launch 14-Day Free Trial →';
   }
 });
 
