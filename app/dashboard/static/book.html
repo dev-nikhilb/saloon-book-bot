@@ -293,12 +293,13 @@ function renderBusiness() {
   document.getElementById('btn-submit').textContent = `Confirm ${L.booking || 'Booking'}`;
   if (biz.vertical?.reason_placeholder) document.getElementById('reason-input').placeholder = biz.vertical.reason_placeholder;
 
+  const localDateStr = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   const today = new Date();
-  const maxD = new Date(); maxD.setDate(today.getDate() + (biz.settings?.advance_booking_days || 14));
+  const maxD = new Date(today); maxD.setDate(today.getDate() + (biz.settings?.advance_booking_days || 14));
   const dp = document.getElementById('date-picker');
-  dp.min = today.toISOString().slice(0, 10);
-  dp.max = maxD.toISOString().slice(0, 10);
-  dp.value = today.toISOString().slice(0, 10);
+  dp.min = localDateStr(today);
+  dp.max = localDateStr(maxD);
+  dp.value = localDateStr(today);
 
   const staff = biz.staff || [];
   if (staff.length <= 1) document.getElementById('staff-filter-wrap').classList.add('hidden');
@@ -376,7 +377,15 @@ async function loadSlots() {
     const slots = data.slots || [];
     window._slots = slots;
     if (!slots.length) {
-      el.innerHTML = '<div class="t-caption" style="text-align:center;padding:1.5rem;background:var(--surface-secondary);border-radius:12px">No openings on this date. Try another day.</div>';
+      const [y, m, day] = dateVal.split('-').map(Number);
+      const next = new Date(y, m - 1, day + 1);
+      const nextStr = `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, '0')}-${String(next.getDate()).padStart(2, '0')}`;
+      const dp = document.getElementById('date-picker');
+      const canNext = !dp.max || nextStr <= dp.max;
+      el.innerHTML = `<div class="t-caption" style="text-align:center;padding:1.5rem;background:var(--surface-secondary);border-radius:12px">
+        <div>No openings remaining on this date.</div>
+        ${canNext ? `<button type="button" class="btn-secondary" style="margin-top:0.75rem;padding:0.45rem 0.9rem;font-size:0.8rem" onclick="document.getElementById('date-picker').value='${nextStr}';loadSlots()">Check Next Day →</button>` : ''}
+      </div>`;
       return;
     }
     const showStaff = new Set(slots.map(s => s.staff_id)).size > 1;

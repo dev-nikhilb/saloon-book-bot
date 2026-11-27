@@ -739,6 +739,8 @@ async def test_whatsapp_multi_staff_picker_and_full_day_slots(db):
     d3 = r3.json()
     assert d3["type"] == "list"
     assert "Priya" in d3["body"]
+    # Every date row shows clear "X slots available" description
+    assert any("slot" in (r.get("description") or "") and "available" in (r.get("description") or "") for r in d3["sections"][0]["rows"])
 
     # 4. Pick a full future date (index 1 = tomorrow or next open day) -> Morning/Afternoon/Evening buttons
     date_id = d3["sections"][0]["rows"][-1]["id"]
@@ -751,8 +753,11 @@ async def test_whatsapp_multi_staff_picker_and_full_day_slots(db):
     d4 = r4.json()
     assert d4["type"] == "buttons"
     btn_ids = [b["id"] for b in d4["buttons"]]
+    btn_titles = [b["title"] for b in d4["buttons"]]
     assert "period_morning" in btn_ids
     assert "period_evening" in btn_ids
+    assert "🌅 Morning" in btn_titles
+    assert "slots available" in d4["body"] or "slot available" in d4["body"]
 
     # 5. Pick Evening -> Clean deduplicated evening slots at 45-min intervals
     r5 = client.post(

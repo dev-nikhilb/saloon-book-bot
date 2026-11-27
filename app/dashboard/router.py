@@ -2044,6 +2044,12 @@ async def update_branch(
     )
     if not result.first():
         raise HTTPException(status_code=404, detail="Branch not found")
+    # Keep staff on this branch synced with updated operating hours (avoid stale onboarding hours hiding slots)
+    if "operating_hours" in updates:
+        await db.execute(
+            text("UPDATE staff SET working_hours = NULL WHERE branch_id = :id AND tenant_id = :tid"),
+            {"id": bid, "tid": tenant_id},
+        )
     await db.commit()
 
     result = await db.execute(

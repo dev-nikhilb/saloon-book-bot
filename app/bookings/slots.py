@@ -254,6 +254,8 @@ def _generate_slots_for_window(
 
     window_start = datetime.combine(target_date, window.open_time, tzinfo=tz)
     window_end = datetime.combine(target_date, window.close_time, tzinfo=tz)
+    if window.close_time == time(0, 0) and window.open_time > time(0, 0):
+        window_end += timedelta(days=1)
 
     slots: list[TimeSlot] = []
     current = window_start

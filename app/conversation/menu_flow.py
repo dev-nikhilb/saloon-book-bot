@@ -555,7 +555,7 @@ async def _proceed_to_dates(db, state, tenant_id, customer_phone, selected, tz_n
     slot_inc = int((tsettings or {}).get("slot_increment_minutes", 15))
     pref_staff = UUID(state.preferred_staff_id) if state.preferred_staff_id else None
 
-    available_dates = []
+    available_dates: list[tuple[date, int]] = []
     for i in range(max_days):
         d = today + timedelta(days=i)
         slots = await get_available_slots(
@@ -563,7 +563,9 @@ async def _proceed_to_dates(db, state, tenant_id, customer_phone, selected, tz_n
             preferred_staff_id=pref_staff, tz_name=tz_name, slot_increment=slot_inc,
         )
         if slots:
-            available_dates.append(d)
+            # Count unique bookable start times (matching the deduplicated slot list)
+            unique_times = len({s.start.strftime("%H:%M") for s in slots})
+            available_dates.append((d, unique_times))
         if len(available_dates) >= 7:
             break
 
@@ -575,22 +577,30 @@ async def _proceed_to_dates(db, state, tenant_id, customer_phone, selected, tz_n
     state.step = ConversationStep.AWAITING_DATE
     state.selected_service_id = selected["id"]
     state.selected_service_name = selected["name"]
-    state.available_slots_json = json.dumps([d.isoformat() for d in available_dates])
+    state.available_slots_json = json.dumps([d.isoformat() for d, _ in available_dates])
     await set_state(tenant_id, customer_phone, state)
 
-    rows = [
-        {
+    rows = []
+    for i, (d, cnt) in enumerate(available_dates):
+        if d == today:
+            title = f"Today ({d.strftime('%d %b')})"
+        elif d == today + timedelta(days=1):
+            title = f"Tomorrow ({d.strftime('%d %b')})"
+        else:
+            title = d.strftime("%a, %d %b")
+        rows.append({
             "id": f"date_{i}",
-            "title": d.strftime("%A, %d %b")[:24],
-            "description": "Today" if d == today else ("Tomorrow" if d == today + timedelta(days=1) else ""),
-        }
-        for i, d in enumerate(available_dates)
-    ]
+            "title": title[:24],
+            "description": f"{cnt} slot{'s' if cnt != 1 else ''} available",
+        })
 
     prefix = "🔄 Rescheduling " if state.booking_id_to_cancel else "📅 "
     with_who = f" with *{state.preferred_staff_name}*" if state.preferred_staff_name else ""
+    today_note = ""
+    if available_dates[0][0] != today:
+        today_note = "\n_No remaining slots for today — showing the next open dates._\n"
     return ListResponse(
-        body=f"{prefix}*{selected['name']}*{with_who}\n\nPick a date:",
+        body=f"{prefix}*{selected['name']}*{with_who}{today_note}\nPick a date:",
         button_text="View Dates",
         sections=[{"title": "Available Dates", "rows": rows}],
     )
@@ -764,12 +774,19 @@ async def _handle_date_selection(db, state, tenant_id, customer_phone, body, tz_
         afternoon = [s for s in slots_data if 12 <= _slot_hour(s, tz_name) < 17]
         evening = [s for s in slots_data if _slot_hour(s, tz_name) >= 17]
         buttons = []
+        summary_lines = []
         if morning:
-            buttons.append({"id": "period_morning", "title": f"🌅 Morning ({len(morning)})"[:20]})
+            n = len(morning)
+            buttons.append({"id": "period_morning", "title": "🌅 Morning"})
+            summary_lines.append(f"• 🌅 *Morning* (before 12 PM) — {n} slot{'s' if n != 1 else ''} available")
         if afternoon:
-            buttons.append({"id": "period_afternoon", "title": f"☀️ Afternoon ({len(afternoon)})"[:20]})
+            n = len(afternoon)
+            buttons.append({"id": "period_afternoon", "title": "☀️ Afternoon"})
+            summary_lines.append(f"• ☀️ *Afternoon* (12–5 PM) — {n} slot{'s' if n != 1 else ''} available")
         if evening:
-            buttons.append({"id": "period_evening", "title": f"🌆 Evening ({len(evening)})"[:20]})
+            n = len(evening)
+            buttons.append({"id": "period_evening", "title": "🌆 Evening"})
+            summary_lines.append(f"• 🌆 *Evening* (after 5 PM) — {n} slot{'s' if n != 1 else ''} available")
 
         if len(buttons) >= 2:
             state.step = ConversationStep.AWAITING_PERIOD
@@ -778,7 +795,8 @@ async def _handle_date_selection(db, state, tenant_id, customer_phone, body, tz_
             return ButtonResponse(
                 body=(
                     f"⏰ *{state.selected_service_name}*{with_who} on *{selected_date.strftime('%A, %d %b')}*\n\n"
-                    "Which part of the day works best?"
+                    + "\n".join(summary_lines)
+                    + "\n\nWhich part of the day works best?"
                 ),
                 buttons=buttons,
             )
