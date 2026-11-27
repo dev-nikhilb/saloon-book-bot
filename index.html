@@ -1024,7 +1024,7 @@ footer { border-top: 0.5px solid var(--separator); padding: 36px 0 48px; font-si
         <article class="step-card">
           <div class="step-num">03</div>
           <h3 class="t-card-title">Optional 0% UPI Deposit</h3>
-          <p>Collect advance booking fees straight to your own UPI ID (0% gateway fee) or Razorpay. Customer sends UTR; you approve in 1 tap on WhatsApp.</p>
+          <p>Collect advance booking fees straight to your own UPI ID (0% gateway fee) or Razorpay. Customer shares their 12-digit UTR (Unique Transaction Reference); you approve in 1 tap on WhatsApp.</p>
         </article>
         <article class="step-card">
           <div class="step-num">04</div>
@@ -1042,12 +1042,12 @@ footer { border-top: 0.5px solid var(--separator); padding: 36px 0 48px; font-si
         <div class="sec-head" style="margin-bottom:0">
           <div class="sec-kicker">Your Command Center</div>
           <h2 class="t-section">One calm agenda. Synced live with WhatsApp.</h2>
-          <p class="t-lead">Inspect every specialist&rsquo;s schedule, verify UPI UTRs in 1 click, and track revenue without spreadsheets.</p>
+          <p class="t-lead">Inspect every specialist&rsquo;s schedule, verify UPI payment references (UTR) in 1 click, and track revenue without spreadsheets.</p>
         </div>
         <div class="segmented" id="dashSwitch" role="tablist" aria-label="Dashboard preview tabs">
           <div class="segmented-pill" id="dashPill"></div>
           <button type="button" class="active" data-tab="agenda">Live Agenda</button>
-          <button type="button" data-tab="upi">UPI &amp; UTRs</button>
+          <button type="button" data-tab="upi">UPI Payments</button>
           <button type="button" data-tab="insights">Revenue</button>
         </div>
       </div>
@@ -1130,7 +1130,7 @@ footer { border-top: 0.5px solid var(--separator); padding: 36px 0 48px; font-si
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
           </div>
           <h3 class="t-card-title">WhatsApp Razorpay + 0% UPI</h3>
-          <p>Collect advance deposits via automated Razorpay Payment Links (webhook-verified) OR 0%-fee direct UPI with customer UTR &amp; 1-tap owner approval.</p>
+          <p>Collect advance deposits via automated Razorpay Payment Links (webhook-verified) OR 0%-fee direct UPI with customer UTR (Unique Transaction Reference) &amp; 1-tap owner approval.</p>
         </article>
 
         <article class="bento-card">
@@ -1892,7 +1892,7 @@ function confirmBookingFlow() {
           `💳 *Pay ₹${demoState.service.deposit} via UPI (0% fee):*\n` +
           `UPI ID: \`${sc.upi}\`\n` +
           `upi://pay?pa=${sc.upi}&am=${demoState.service.deposit}\n\n` +
-          `_Slot held 15 min. After paying, tap below or reply \`paid <12-digit UTR>\`._`,
+          `_Slot held 15 min. After paying, tap below or reply \`paid <12-digit UTR / Unique Transaction Reference>\`._`,
         footer: 'Auto-verifies via Razorpay or 1-tap owner approval',
         buttons: [
           { title: "✅ I've Paid (Send UTR)", onClick: () => submitDemoUtrFlow() },
@@ -2617,17 +2617,17 @@ function renderDashPreview(tab) {
           <div class="pill-mini ok" style="align-self:flex-start">0% Gateway Fee · Direct to Your Bank</div>
           <h3 class="t-card-title" style="font-size:1.25rem">Verify UPI Deposits in One Tap</h3>
           <p style="margin:0;font-size:0.88rem;color:var(--label-secondary);line-height:1.55">
-            No Razorpay account required. Add your business UPI ID (GPay, PhonePe, Paytm Business). Customers pay straight into your bank, share their 12-digit UTR, and you receive <strong>1-tap Confirm / Reject buttons</strong> on WhatsApp and in your Dashboard.
+            No Razorpay account required. Add your business UPI ID (GPay, PhonePe, Paytm Business). Customers pay straight into your bank, share their 12-digit UTR (Unique Transaction Reference), and you receive <strong>1-tap Confirm / Reject buttons</strong> on WhatsApp and in your Dashboard.
           </p>
         </div>
         <div style="background:var(--surface-secondary);border-radius:16px;padding:18px;border:0.5px solid var(--hairline);display:flex;flex-direction:column;gap:10px">
           <div style="display:flex;justify-content:space-between;align-items:center">
             <strong style="font-size:0.88rem">Deposit Verification · #BK4092</strong>
-            <span class="pill-mini warn">UTR Submitted</span>
+            <span class="pill-mini warn">Payment Ref Submitted</span>
           </div>
           <div style="font-size:0.82rem;color:var(--label-secondary)">Diya Patel · 60m Therapy Session · <strong style="color:var(--label)">₹500</strong></div>
-          <div style="padding:10px 12px;border-radius:10px;background:var(--surface);font-family:ui-monospace,monospace;font-size:0.82rem;display:flex;justify-content:space-between">
-            <span>UTR: 412890123456</span><span style="color:var(--green-text);font-weight:700">100% Direct</span>
+          <div style="padding:10px 12px;border-radius:10px;background:var(--surface);font-family:ui-monospace,monospace;font-size:0.8rem;display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap">
+            <span>UTR (Unique Txn Ref): 412890123456</span><span style="color:var(--green-text);font-weight:700">100% Direct</span>
           </div>
           <div style="display:flex;gap:8px;margin-top:4px">
             <a href="#signup" class="btn btn-primary btn-sm" style="flex:1">✓ Confirm &amp; Notify Customer</a>
@@ -2693,7 +2693,7 @@ const FAQS = [
   },
   {
     q: 'Can I collect booking advances without a Razorpay account?',
-    a: 'Yes. Just add your business UPI ID (GPay, PhonePe, or Paytm Business) in Settings at 0% transaction fee. Money goes straight into your bank, the customer shares their UTR, and you approve in 1 tap right inside WhatsApp.',
+    a: 'Yes. Just add your business UPI ID (GPay, PhonePe, or Paytm Business) in Settings at 0% transaction fee. Money goes straight into your bank, the customer shares their 12-digit UTR (Unique Transaction Reference), and you approve in 1 tap right inside WhatsApp.',
   },
   {
     q: 'Can two clients ever book the same specialist or time slot?',

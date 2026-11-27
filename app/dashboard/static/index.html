@@ -1975,7 +1975,7 @@ async function renderBookings() {
           <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;flex:1;justify-content:flex-end">
             <div class="bk-search-wrap">
               <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg>
-              <input id="bk-search" class="input" type="search" placeholder="Search ${escHtml(L.customer.toLowerCase())}, phone, service, UTR…">
+              <input id="bk-search" class="input" type="search" placeholder="Search ${escHtml(L.customer.toLowerCase())}, phone, service, payment ref (UTR)…">
             </div>
             <select id="bk-staff" class="select" style="width:auto;padding:0.46rem 0.75rem;font-size:0.82rem" onchange="bookingsPage=1;loadBookings()">
               <option value="">All ${escHtml(L.staffPlural)}</option>
@@ -2166,7 +2166,7 @@ function renderBookingInsights(allItems) {
         </div>
         <span class="t-caption">
           ${pendingCount > 0
-            ? (submittedUtrCount > 0 ? `${submittedUtrCount} UTR ready to verify →` : 'Tap to review holds →')
+            ? (submittedUtrCount > 0 ? `${submittedUtrCount} payment ref (UTR) ready →` : 'Tap to review holds →')
             : '0 deposits waiting'}
         </span>
       </div>`;
@@ -2178,7 +2178,7 @@ function renderBookingInsights(allItems) {
     if (counts.pending_deposit > 0 && state.bookingStatusFilter !== 'pending_deposit') {
       attEl.classList.remove('hidden');
       attEl.innerHTML = `
-        <span>⚡ <strong>${counts.pending_deposit} ${counts.pending_deposit === 1 ? 'deposit' : 'deposits'}</strong> waiting for verification${submittedUtrCount > 0 ? ` (${submittedUtrCount} customer UTR submitted)` : ''}.</span>
+        <span>⚡ <strong>${counts.pending_deposit} ${counts.pending_deposit === 1 ? 'deposit' : 'deposits'}</strong> waiting for verification${submittedUtrCount > 0 ? ` (${submittedUtrCount} Unique Transaction Reference / UTR submitted)` : ''}.</span>
         <button type="button" class="btn btn-sm" style="background:var(--surface);color:var(--orange-text);box-shadow:0 1px 2px rgba(0,0,0,0.08)" onclick="setBookingStatusChip('pending_deposit')">Review Pending →</button>`;
     } else {
       attEl.classList.add('hidden');
@@ -2222,7 +2222,7 @@ function bookingPrimaryActionHtml(b) {
 function bookingUtrPillHtml(b) {
   if (!b.utr_reference) return '';
   const isSubmitted = b.payment_status === 'submitted_utr';
-  return `<span class="pill t-mono" style="font-size:0.69rem;background:${isSubmitted ? 'var(--orange-soft)' : 'var(--green-soft)'};color:${isSubmitted ? 'var(--orange-text)' : 'var(--green-text)'}">UTR: ${escHtml(b.utr_reference)}</span>`;
+  return `<span class="pill t-mono" title="Unique Transaction Reference (UPI Payment ID)" style="font-size:0.69rem;background:${isSubmitted ? 'var(--orange-soft)' : 'var(--green-soft)'};color:${isSubmitted ? 'var(--orange-text)' : 'var(--green-text)'}">UTR: ${escHtml(b.utr_reference)}</span>`;
 }
 
 function renderBookingsViews() {
@@ -2443,7 +2443,7 @@ async function showBookingDetail(id) {
           <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.5rem">
             <div class="t-body">
               ${b.deposit_amount_paise ? `<strong>${formatCurrency(b.deposit_amount_paise)}</strong> · ` : ''}
-              ${b.utr_reference ? `UTR / Txn Ref: <code id="insp-utr" class="t-mono" style="font-weight:700">${escHtml(b.utr_reference)}</code>` : '<span class="t-caption">No UTR submitted yet</span>'}
+              ${b.utr_reference ? `Unique Transaction Ref (UTR): <code id="insp-utr" class="t-mono" style="font-weight:700">${escHtml(b.utr_reference)}</code>` : '<span class="t-caption">No Unique Transaction Reference (UTR) submitted yet</span>'}
             </div>
             ${b.utr_reference ? `<button type="button" class="btn btn-secondary btn-sm" style="padding:2px 8px;font-size:0.72rem" onclick="copyTextById('insp-utr','UTR copied')">Copy UTR</button>` : ''}
           </div>
@@ -3475,20 +3475,20 @@ async function renderSettings() {
               <select name="deposit_mode" class="select">
                 <option value="auto" ${(s.deposit_mode || 'auto') === 'auto' ? 'selected' : ''}>Auto (Razorpay → Direct UPI)</option>
                 <option value="razorpay" ${s.deposit_mode === 'razorpay' ? 'selected' : ''}>Razorpay Payment Links</option>
-                <option value="upi_manual" ${s.deposit_mode === 'upi_manual' ? 'selected' : ''}>Direct UPI + UTR Verify (0% fee)</option>
+                <option value="upi_manual" ${s.deposit_mode === 'upi_manual' ? 'selected' : ''}>Direct UPI + UTR / Payment Ref Verify (0% fee)</option>
                 <option value="disabled" ${s.deposit_mode === 'disabled' ? 'selected' : ''}>Disabled</option>
               </select>
             </div>
             <div>
               <label class="field-label">Merchant UPI ID (VPA)</label>
-              <input name="upi_id" class="input t-mono" value="${escHtml(s.upi_id || '')}" placeholder="yourshop@okicici">
+              <input name="upi_id" class="input t-mono" value="${escHtml(s.upi_id || '')}" placeholder="yourbusiness@okicici">
             </div>
             <div>
               <label class="field-label">Slot Hold Duration (mins)</label>
               <input name="deposit_hold_minutes" type="number" min="5" max="1440" class="input t-num" value="${s.deposit_hold_minutes || 15}">
             </div>
           </div>
-          <div class="t-caption">Razorpay Payment Links verify automatically via webhook. Direct UPI collects a 12-digit UTR from the customer on WhatsApp and lets you reply <code>confirm &lt;id&gt;</code> to approve in 1 tap.</div>
+          <div class="t-caption">Razorpay Payment Links verify automatically via webhook. Direct UPI collects a 12-digit Unique Transaction Reference (UTR) from the customer on WhatsApp and lets you reply <code>confirm &lt;id&gt;</code> to approve in 1 tap.</div>
           <div>
             ${depositsEnabled
               ? `<button type="button" class="btn btn-primary btn-sm" onclick="saveDepositSettings()">Save Deposit Settings</button>`

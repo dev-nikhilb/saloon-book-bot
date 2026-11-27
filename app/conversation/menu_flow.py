@@ -178,7 +178,7 @@ async def handle_customer_message(
         state.pending_payment_booking_id = ref
         await set_state(tenant_id, customer_phone, state)
         return TextResponse(
-            f"💳 Please reply with your *UPI Reference / UTR number* (12 digits from GPay/PhonePe/Paytm) "
+            f"💳 Please reply with your *12-digit UTR (Unique Transaction Reference)* from GPay / PhonePe / Paytm "
             f"for booking `{ref}`.\n\nExample: `412345678901`"
         )
 
@@ -196,7 +196,7 @@ async def handle_customer_message(
             return ButtonResponse(
                 body=(
                     f"⏳ Payment for `{ref}` is still pending (status: {res.get('payment_status')}).\n"
-                    "If you already paid via UPI, tap below to share your UTR reference for quick confirmation."
+                    "If you already paid via UPI, tap below to share your 12-digit UTR (Unique Transaction Reference) for quick confirmation."
                 ),
                 buttons=[
                     {"id": f"check_pay_{ref}", "title": "🔄 Check Again"},
@@ -1049,14 +1049,16 @@ async def _handle_confirmation(
                 f"\n\n💳 *Pay {deposit_str} via UPI (0% fee):*\n"
                 f"UPI ID: `{pay_info['upi_id']}`\n"
                 f"Tap to pay: {pay_info['url']}\n"
-                f"_After paying, tap *I've Paid (UTR)* below or reply `paid <12-digit UTR>` (slot held {hold_mins} min)._"
+                f"_After paying, tap *I've Paid (UTR)* below or reply `paid <12-digit UTR>` "
+                f"(Unique Transaction Reference from your UPI app; slot held {hold_mins} min)._"
             )
         elif (tsettings.get("upi_id") or "").strip():
             raw_upi = tsettings["upi_id"].strip()
             pay_link_line = (
                 f"\n\n💳 *Pay {deposit_str} via UPI:*\n"
                 f"UPI ID: `{raw_upi}`\n"
-                f"_After paying, tap *I've Paid (UTR)* below or reply `paid <12-digit UTR>` (slot held {hold_mins} min)._"
+                f"_After paying, tap *I've Paid (UTR)* below or reply `paid <12-digit UTR>` "
+                f"(Unique Transaction Reference from your UPI app; slot held {hold_mins} min)._"
             )
 
         return ButtonResponse(
@@ -1370,7 +1372,7 @@ async def _handle_utr_submission(
         res = await submit_utr_reference(db, tenant_id, booking_ref, utr_text)
         await clear_state(tenant_id, customer_phone)
         return TextResponse(
-            f"🧾 *UTR Received (`{res['utr_reference']}`)* for booking `{res['booking_ref']}`!\n\n"
+            f"🧾 *Unique Transaction Reference (UTR) Received (`{res['utr_reference']}`)* for booking `{res['booking_ref']}`!\n\n"
             "We've notified the business owner to verify your UPI payment. "
             "You'll receive a WhatsApp confirmation as soon as they approve it."
         )

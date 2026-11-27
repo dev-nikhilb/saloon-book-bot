@@ -454,7 +454,7 @@ async function submitBooking(e) {
       if (data.payment_method === 'upi_manual') {
         cta.innerHTML = `
           <a href="${esc(data.payment_url)}" class="btn-primary" style="display:block;text-decoration:none;background:var(--orange)">Pay ${inr(data.deposit_amount_paise)} via UPI App</a>
-          <div class="t-caption" style="margin-top:0.65rem">UPI ID: <code style="font-family:ui-monospace,monospace">${esc(data.upi_id || '')}</code><br>After paying, reply <strong>paid &lt;12-digit UTR&gt;</strong> on WhatsApp to confirm your slot.</div>`;
+          <div class="t-caption" style="margin-top:0.65rem">UPI ID: <code style="font-family:ui-monospace,monospace">${esc(data.upi_id || '')}</code><br>After paying, reply <strong>paid &lt;12-digit UTR&gt;</strong> (Unique Transaction Reference from your UPI app) on WhatsApp to confirm your slot.</div>`;
       } else {
         cta.innerHTML = `<a href="${esc(data.payment_url)}" target="_blank" class="btn-primary" style="display:block;text-decoration:none;background:var(--orange)">Pay Deposit (${inr(data.deposit_amount_paise)})</a>`;
       }

@@ -373,7 +373,7 @@ async def submit_utr_reference(
     """Record a customer's UPI UTR/reference number and ping the owner for 1-tap verification."""
     cleaned_utr = re.sub(r"[^A-Za-z0-9]", "", utr_reference.strip())
     if not UTR_RE.match(cleaned_utr):
-        raise ValueError("Please send a valid UPI Reference / UTR number (6–24 digits/letters).")
+        raise ValueError("Please send a valid 12-digit Unique Transaction Reference / UTR number (6–24 digits/letters from your UPI app).")
 
     row = (
         await db.execute(
@@ -451,7 +451,7 @@ async def submit_utr_reference(
         f"• Customer: {row.customer_name or row.customer_phone}\n"
         f"• Service: {row.service_name} ({amt_str})\n"
         f"• Booking ID: `{bid_short}`\n"
-        f"• UPI UTR: `{cleaned_utr}`\n\n"
+        f"• Unique Transaction Ref (UTR): `{cleaned_utr}`\n\n"
         f"Tap below to approve or reply *confirm {bid_short}* / *reject {bid_short}*."
     )
     owner_notified = await _send_whatsapp_notice(
