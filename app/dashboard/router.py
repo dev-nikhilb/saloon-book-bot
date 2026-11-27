@@ -1282,7 +1282,8 @@ async def list_bookings(
         text(
             f"SELECT b.*, "
             f"c.name AS customer_name, c.phone AS customer_phone, "
-            f"s.name AS service_name, st.name AS staff_name, "
+            f"s.name AS service_name, s.duration_minutes, s.price_paise AS service_price_paise, "
+            f"st.name AS staff_name, "
             f"p.payment_id, p.payment_status, p.payment_method, p.utr_reference, p.deposit_amount_paise "
             f"FROM bookings b "
             f"LEFT JOIN customers c ON c.id = b.customer_id "

@@ -548,6 +548,176 @@ html[data-theme="dark"] .apple-toast { background: rgba(58, 58, 60, 0.92); }
 }
 @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
 
+/* ==========================================================================
+   APPOINTMENTS WORKSPACE — Apple Calendar / Inset Grouped Insight Layout
+   ========================================================================== */
+.bk-insights {
+  display: grid; grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.85rem; margin-bottom: 1rem;
+}
+@media (max-width: 1024px) { .bk-insights { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 520px) { .bk-insights { grid-template-columns: 1fr; } }
+
+.bk-stat {
+  background: var(--surface); border-radius: var(--radius-lg);
+  border: 0.5px solid var(--hairline); box-shadow: var(--shadow-card);
+  padding: 1rem 1.15rem; display: flex; flex-direction: column; gap: 0.3rem;
+  transition: transform 180ms cubic-bezier(0.22, 1, 0.36, 1), border-color 160ms ease;
+}
+.bk-stat.clickable { cursor: pointer; }
+.bk-stat.clickable:hover { transform: translateY(-2px); border-color: rgba(0, 122, 255, 0.25); }
+.bk-stat.alert {
+  background: linear-gradient(135deg, var(--orange-soft), var(--surface) 72%);
+  border-color: rgba(255, 149, 0, 0.32);
+}
+.bk-stat-val {
+  font-size: 1.55rem; font-weight: 700; letter-spacing: -0.03em; line-height: 1.12;
+  font-variant-numeric: tabular-nums; color: var(--label);
+}
+
+.bk-attention {
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 0.75rem;
+  padding: 0.75rem 1.05rem; margin-bottom: 1rem; border-radius: var(--radius-md);
+  background: var(--orange-soft); border: 0.5px solid rgba(255, 149, 0, 0.3);
+  color: var(--orange-text); font-size: 0.84rem; font-weight: 500;
+}
+
+.bk-toolbar-card {
+  background: var(--surface); border-radius: var(--radius-lg);
+  border: 0.5px solid var(--hairline); box-shadow: var(--shadow-card);
+  padding: 0.9rem 1.1rem; margin-bottom: 1rem;
+  display: flex; flex-direction: column; gap: 0.75rem;
+}
+.bk-toolbar-row {
+  display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.65rem;
+}
+.bk-date-nav {
+  display: inline-flex; align-items: center; gap: 0.25rem;
+  background: var(--surface-secondary); padding: 3px; border-radius: 11px;
+  border: 0.5px solid var(--hairline); flex-wrap: wrap;
+}
+.bk-range-btn {
+  border: none; background: transparent; color: var(--label-secondary);
+  font-family: inherit; font-size: 0.78rem; font-weight: 600;
+  padding: 0.36rem 0.7rem; border-radius: 8px; cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease, transform 90ms ease;
+}
+.bk-range-btn:hover { color: var(--label); }
+.bk-range-btn:active { transform: scale(0.96); }
+.bk-range-btn.active {
+  background: var(--surface); color: var(--label);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1), 0 0.5px 1px rgba(0, 0, 0, 0.05);
+}
+.bk-step-btn {
+  width: 28px; height: 28px; display: inline-grid; place-items: center; padding: 0;
+  border: none; background: transparent; color: var(--label-secondary);
+  border-radius: 7px; cursor: pointer; font-size: 0.95rem; font-weight: 600;
+  transition: background-color 140ms ease, color 140ms ease;
+}
+.bk-step-btn:hover { background: var(--surface); color: var(--label); }
+
+.bk-search-wrap {
+  position: relative; flex: 1; min-width: 200px; max-width: 320px;
+}
+.bk-search-wrap svg {
+  position: absolute; left: 0.72rem; top: 50%; transform: translateY(-50%);
+  color: var(--label-tertiary); pointer-events: none;
+}
+.bk-search-wrap input {
+  width: 100%; padding: 0.46rem 0.75rem 0.46rem 2.15rem;
+  font-size: 0.82rem; border-radius: 10px;
+}
+
+.bk-status-pills {
+  display: flex; align-items: center; gap: 0.35rem; flex-wrap: wrap;
+}
+.bk-chip {
+  display: inline-flex; align-items: center; gap: 0.35rem;
+  border: 0.5px solid var(--hairline); background: var(--surface-secondary);
+  color: var(--label-secondary); font-family: inherit; font-size: 0.76rem; font-weight: 600;
+  padding: 0.34rem 0.68rem; border-radius: 999px; cursor: pointer;
+  transition: background-color 140ms ease, color 140ms ease, border-color 140ms ease, transform 90ms ease;
+}
+.bk-chip:hover { color: var(--label); }
+.bk-chip:active { transform: scale(0.96); }
+.bk-chip.active {
+  background: var(--blue); color: #fff; border-color: transparent;
+}
+.bk-chip .cnt {
+  font-variant-numeric: tabular-nums; font-size: 0.7rem; opacity: 0.82;
+  padding: 0.05rem 0.38rem; border-radius: 999px; background: rgba(128, 128, 128, 0.14);
+}
+.bk-chip.active .cnt { background: rgba(255, 255, 255, 0.24); opacity: 1; }
+
+/* Timeline Day Groups */
+.bk-day-group { margin-bottom: 1.15rem; }
+.bk-day-head {
+  display: flex; align-items: baseline; justify-content: space-between; gap: 0.75rem;
+  padding: 0 0.35rem 0.45rem;
+}
+.bk-day-title { font-size: 0.86rem; font-weight: 700; letter-spacing: -0.01em; color: var(--label); }
+.bk-day-meta { font-size: 0.76rem; color: var(--label-secondary); font-variant-numeric: tabular-nums; }
+
+.bk-group-card {
+  background: var(--surface); border-radius: var(--radius-lg);
+  border: 0.5px solid var(--hairline); box-shadow: var(--shadow-card);
+  overflow: hidden;
+}
+.bk-row {
+  display: grid; grid-template-columns: 88px 4px 36px minmax(0, 1fr) auto;
+  align-items: center; gap: 0.85rem;
+  padding: 0.85rem 1.05rem;
+  border-bottom: 0.5px solid var(--hairline);
+  cursor: pointer; transition: background-color 130ms ease;
+}
+.bk-row:last-child { border-bottom: none; }
+.bk-row:hover { background: var(--surface-secondary); }
+.bk-row-time { text-align: right; }
+.bk-row-bar { width: 4px; height: 38px; border-radius: 999px; }
+.bk-avatar {
+  width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0;
+  display: grid; place-items: center; font-weight: 700; font-size: 0.82rem;
+  background: var(--blue-soft); color: var(--blue);
+}
+.bk-row-main { min-width: 0; display: flex; flex-direction: column; gap: 0.22rem; }
+.bk-row-top { display: flex; align-items: center; gap: 0.45rem; flex-wrap: wrap; }
+.bk-row-sub {
+  font-size: 0.79rem; color: var(--label-secondary);
+  display: flex; align-items: center; gap: 0.42rem; flex-wrap: wrap;
+}
+.bk-row-actions { display: inline-flex; align-items: center; gap: 0.45rem; }
+.bk-chev { color: var(--label-tertiary); font-size: 1.05rem; line-height: 1; padding-left: 0.15rem; }
+
+@media (max-width: 720px) {
+  .bk-row {
+    grid-template-columns: 68px 4px minmax(0, 1fr);
+    gap: 0.65rem; padding: 0.8rem 0.85rem;
+  }
+  .bk-avatar { display: none; }
+  .bk-row-actions { grid-column: 1 / -1; justify-content: flex-end; padding-top: 0.25rem; }
+}
+
+/* Team Lanes View */
+.bk-team-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+  gap: 0.9rem; align-items: start;
+}
+.bk-lane {
+  background: var(--surface); border-radius: var(--radius-lg);
+  border: 0.5px solid var(--hairline); box-shadow: var(--shadow-card);
+  padding: 0.9rem; display: flex; flex-direction: column; gap: 0.65rem;
+}
+.bk-lane-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
+  padding-bottom: 0.6rem; border-bottom: 0.5px solid var(--hairline);
+}
+.bk-lane-card {
+  background: var(--surface-secondary); border-radius: 13px;
+  padding: 0.75rem 0.85rem; border-left: 3.5px solid var(--blue);
+  cursor: pointer; transition: transform 130ms ease, background-color 130ms ease;
+}
+.bk-lane-card:hover { transform: translateY(-1px); }
+
 /* Page cross-fade */
 .view-enter { animation: viewFade 220ms cubic-bezier(0.22, 1, 0.36, 1); }
 @keyframes viewFade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
@@ -1645,43 +1815,180 @@ async function renderHome() {
 }
 
 /* ==========================================================================
-   2. BOOKINGS (With Spring Segmented Control + Slide-Over Inspector Sheet)
+   2. BOOKINGS — Apple Calendar & Insight-First Appointments Workspace
    ========================================================================== */
 let bookingsPage = 1;
-let bookingsViewMode = localStorage.getItem('bb_bk_view') || 'list';
+let bookingsViewMode = localStorage.getItem('bb_bk_view') || 'timeline';
+if (!['timeline', 'team', 'table'].includes(bookingsViewMode)) bookingsViewMode = 'timeline';
+let bookingsRangeMode = 'upcoming'; // 'today' | 'tomorrow' | 'week' | 'upcoming' | 'all' | 'custom'
+let bookingsAnchorDate = todayStr();
+let bookingsSearchQuery = '';
+let bookingsRawItems = [];
+
+function addDaysStr(isoDate, deltaDays) {
+  const [y, m, d] = isoDate.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d + deltaDays));
+  return dt.toISOString().split('T')[0];
+}
+
+function getBookingRangeBounds() {
+  const today = todayStr();
+  if (bookingsRangeMode === 'today') return { from: bookingsAnchorDate, to: bookingsAnchorDate };
+  if (bookingsRangeMode === 'tomorrow') {
+    const tmr = addDaysStr(today, 1);
+    return { from: tmr, to: tmr };
+  }
+  if (bookingsRangeMode === 'week') return { from: today, to: addDaysStr(today, 6) };
+  if (bookingsRangeMode === 'upcoming') return { from: today, to: '' };
+  if (bookingsRangeMode === 'custom') {
+    return {
+      from: document.getElementById('bk-from')?.value || '',
+      to: document.getElementById('bk-to')?.value || '',
+    };
+  }
+  return { from: '', to: '' }; // 'all'
+}
+
+function formatDayGroupHeader(isoDay) {
+  const today = todayStr();
+  const tomorrow = addDaysStr(today, 1);
+  const yesterday = addDaysStr(today, -1);
+  const [y, m, d] = isoDay.split('-').map(Number);
+  const dt = new Date(y, m - 1, d);
+  const full = dt.toLocaleDateString('en-IN', { weekday: 'short', day: 'numeric', month: 'short' });
+  if (isoDay === today) return `Today · ${full}`;
+  if (isoDay === tomorrow) return `Tomorrow · ${full}`;
+  if (isoDay === yesterday) return `Yesterday · ${full}`;
+  return full;
+}
+
+function localDateKey(isoStr) {
+  if (!isoStr) return 'unknown';
+  const dt = new Date(isoStr);
+  const y = dt.getFullYear();
+  const m = String(dt.getMonth() + 1).padStart(2, '0');
+  const d = String(dt.getDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+function setBookingsRange(mode, anchor = null) {
+  bookingsRangeMode = mode;
+  if (anchor) bookingsAnchorDate = anchor;
+  else if (mode === 'today') bookingsAnchorDate = todayStr();
+  else if (mode === 'tomorrow') bookingsAnchorDate = addDaysStr(todayStr(), 1);
+  const customRow = document.getElementById('bk-custom-row');
+  if (customRow) customRow.classList.toggle('hidden', mode !== 'custom');
+  document.querySelectorAll('#bk-range-nav .bk-range-btn').forEach(b => {
+    b.classList.toggle('active', b.dataset.range === mode);
+  });
+  const labelBtn = document.getElementById('bk-day-label');
+  if (labelBtn) {
+    if (mode === 'today' && bookingsAnchorDate !== todayStr()) {
+      const [y, m, d] = bookingsAnchorDate.split('-').map(Number);
+      labelBtn.textContent = new Date(y, m - 1, d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' });
+    } else {
+      labelBtn.textContent = 'Today';
+    }
+  }
+  bookingsPage = 1;
+  loadBookings();
+}
+
+function stepBookingDay(delta) {
+  if (bookingsRangeMode !== 'today') {
+    bookingsAnchorDate = addDaysStr(todayStr(), delta);
+  } else {
+    bookingsAnchorDate = addDaysStr(bookingsAnchorDate, delta);
+  }
+  setBookingsRange('today', bookingsAnchorDate);
+}
+
+function setBookingStatusChip(val) {
+  state.bookingStatusFilter = val;
+  document.querySelectorAll('#bk-status-pills .bk-chip').forEach(c => {
+    c.classList.toggle('active', c.dataset.val === val);
+  });
+  renderBookingsViews();
+}
 
 async function renderBookings() {
   const L = getLabels();
   setToolbarAction(`+ New ${L.booking}`, () => openNewBookingModal());
+  state.bookingStatusFilter = '';
+  bookingsSearchQuery = '';
+  bookingsAnchorDate = todayStr();
 
   document.getElementById('page-content').innerHTML = `
     <div class="view-enter">
-      <div class="card">
-        <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:0.75rem;margin-bottom:1.1rem">
-          <div style="display:flex;flex-wrap:wrap;align-items:center;gap:0.6rem">
-            <div class="segmented" id="bk-status-seg">
-              <div class="segmented-thumb"></div>
-              <button data-val="" class="active">All</button>
-              <button data-val="confirmed">Confirmed</button>
-              <button data-val="pending_deposit">Pending</button>
-              <button data-val="completed">Completed</button>
-              <button data-val="cancelled">Cancelled</button>
-            </div>
-            <div class="segmented" id="bk-view-seg">
-              <div class="segmented-thumb"></div>
-              <button data-view="list" class="${bookingsViewMode === 'list' ? 'active' : ''}">☰ List</button>
-              <button data-view="agenda" class="${bookingsViewMode === 'agenda' ? 'active' : ''}">▦ Staff Agenda</button>
-            </div>
+      <!-- 1. At-a-Glance Insights Row -->
+      <div class="bk-insights" id="bk-insights">
+        <div class="bk-stat"><div class="skeleton" style="height:56px"></div></div>
+        <div class="bk-stat"><div class="skeleton" style="height:56px"></div></div>
+        <div class="bk-stat"><div class="skeleton" style="height:56px"></div></div>
+        <div class="bk-stat"><div class="skeleton" style="height:56px"></div></div>
+      </div>
+
+      <!-- 2. Conditional Pending Deposits Attention Strip -->
+      <div id="bk-attention" class="bk-attention hidden"></div>
+
+      <!-- 3. Clean 2-Row Command Bar -->
+      <div class="bk-toolbar-card">
+        <div class="bk-toolbar-row">
+          <div class="bk-date-nav" id="bk-range-nav">
+            <button type="button" class="bk-step-btn" title="Previous day" onclick="stepBookingDay(-1)">‹</button>
+            <button type="button" id="bk-day-label" class="bk-range-btn ${bookingsRangeMode === 'today' ? 'active' : ''}" data-range="today" onclick="setBookingsRange('today', todayStr())">Today</button>
+            <button type="button" class="bk-step-btn" title="Next day" onclick="stepBookingDay(1)">›</button>
+            <button type="button" class="bk-range-btn ${bookingsRangeMode === 'tomorrow' ? 'active' : ''}" data-range="tomorrow" onclick="setBookingsRange('tomorrow')">Tomorrow</button>
+            <button type="button" class="bk-range-btn ${bookingsRangeMode === 'week' ? 'active' : ''}" data-range="week" onclick="setBookingsRange('week')">7 Days</button>
+            <button type="button" class="bk-range-btn ${bookingsRangeMode === 'upcoming' ? 'active' : ''}" data-range="upcoming" onclick="setBookingsRange('upcoming')">Upcoming</button>
+            <button type="button" class="bk-range-btn ${bookingsRangeMode === 'all' ? 'active' : ''}" data-range="all" onclick="setBookingsRange('all')">All</button>
+            <button type="button" class="bk-range-btn ${bookingsRangeMode === 'custom' ? 'active' : ''}" data-range="custom" onclick="setBookingsRange('custom')">Custom</button>
           </div>
-          <div style="display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center">
-            <input type="date" id="bk-from" class="input" style="width:auto" value="${todayStr()}">
-            <input type="date" id="bk-to" class="input" style="width:auto">
-            <select id="bk-staff" class="select" style="width:auto"><option value="">All ${escHtml(L.staffPlural)}</option></select>
-            <button class="btn btn-secondary btn-sm" onclick="bookingsPage=1;loadBookings()">Apply</button>
+
+          <div class="segmented" id="bk-view-seg">
+            <div class="segmented-thumb"></div>
+            <button type="button" data-view="timeline" class="${bookingsViewMode === 'timeline' ? 'active' : ''}">Timeline</button>
+            <button type="button" data-view="team" class="${bookingsViewMode === 'team' ? 'active' : ''}">${escHtml(L.staffPlural)}</button>
+            <button type="button" data-view="table" class="${bookingsViewMode === 'table' ? 'active' : ''}">Table</button>
           </div>
         </div>
 
-        <div id="bk-table-wrap" class="table-wrap ${bookingsViewMode === 'agenda' ? 'hidden' : ''}">
+        <div id="bk-custom-row" class="bk-toolbar-row ${bookingsRangeMode === 'custom' ? '' : 'hidden'}" style="padding-top:0.25rem;border-top:0.5px solid var(--hairline)">
+          <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap">
+            <span class="t-caption" style="font-weight:600">Date Range:</span>
+            <input type="date" id="bk-from" class="input" style="width:auto;padding:0.38rem 0.65rem;font-size:0.8rem" value="${todayStr()}" onchange="bookingsPage=1;loadBookings()">
+            <span class="t-caption">to</span>
+            <input type="date" id="bk-to" class="input" style="width:auto;padding:0.38rem 0.65rem;font-size:0.8rem" onchange="bookingsPage=1;loadBookings()">
+          </div>
+          <button type="button" class="btn btn-ghost btn-sm" onclick="setBookingsRange('all')">Clear dates</button>
+        </div>
+
+        <div class="bk-toolbar-row">
+          <div class="bk-status-pills" id="bk-status-pills">
+            <button type="button" class="bk-chip active" data-val="" onclick="setBookingStatusChip('')">All <span class="cnt" id="cnt-all">0</span></button>
+            <button type="button" class="bk-chip" data-val="confirmed" onclick="setBookingStatusChip('confirmed')">Confirmed <span class="cnt" id="cnt-confirmed">0</span></button>
+            <button type="button" class="bk-chip" data-val="pending_deposit" onclick="setBookingStatusChip('pending_deposit')">Pending <span class="cnt" id="cnt-pending_deposit">0</span></button>
+            <button type="button" class="bk-chip" data-val="completed" onclick="setBookingStatusChip('completed')">Completed <span class="cnt" id="cnt-completed">0</span></button>
+            <button type="button" class="bk-chip" data-val="cancelled" onclick="setBookingStatusChip('cancelled')">Cancelled <span class="cnt" id="cnt-cancelled">0</span></button>
+          </div>
+
+          <div style="display:flex;align-items:center;gap:0.5rem;flex-wrap:wrap;flex:1;justify-content:flex-end">
+            <div class="bk-search-wrap">
+              <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg>
+              <input id="bk-search" class="input" type="search" placeholder="Search ${escHtml(L.customer.toLowerCase())}, phone, service, UTR…">
+            </div>
+            <select id="bk-staff" class="select" style="width:auto;padding:0.46rem 0.75rem;font-size:0.82rem" onchange="bookingsPage=1;loadBookings()">
+              <option value="">All ${escHtml(L.staffPlural)}</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- 4. Active View Canvas -->
+      <div id="bk-timeline-wrap" class="${bookingsViewMode === 'timeline' ? '' : 'hidden'}"></div>
+      <div id="bk-team-wrap" class="bk-team-grid ${bookingsViewMode === 'team' ? '' : 'hidden'}"></div>
+      <div id="bk-table-card" class="card ${bookingsViewMode === 'table' ? '' : 'hidden'}" style="padding:0.5rem 1.25rem">
+        <div class="table-wrap">
           <table class="apple-table">
             <thead>
               <tr>
@@ -1689,49 +1996,39 @@ async function renderBookings() {
                 <th>${escHtml(L.customer)}</th>
                 <th>${escHtml(L.service)}</th>
                 <th>${escHtml(L.staff)}</th>
+                <th>Price</th>
                 <th>Status</th>
-                <th style="text-align:right">Quick Actions</th>
+                <th style="text-align:right">Action</th>
               </tr>
             </thead>
             <tbody id="bk-tbody"></tbody>
           </table>
         </div>
-        <div id="bk-agenda-wrap" class="${bookingsViewMode === 'agenda' ? '' : 'hidden'}" style="display:${bookingsViewMode === 'agenda' ? 'grid' : 'none'};grid-template-columns:repeat(auto-fit,minmax(255px,1fr));gap:0.9rem"></div>
-        <div id="bk-empty" class="hidden" style="text-align:center;padding:3rem 1rem">
-          <div class="t-heading">No ${escHtml(L.bookings.toLowerCase())} found</div>
-          <p class="t-caption" style="margin:0.35rem 0 1rem">Try clearing the date filter or create a walk-in booking.</p>
-          <button class="btn btn-soft-blue btn-sm" onclick="document.getElementById('bk-from').value='';document.getElementById('bk-to').value='';loadBookings()">Show All Dates</button>
+      </div>
+
+      <div id="bk-empty" class="card hidden" style="text-align:center;padding:3.25rem 1.25rem">
+        <div style="font-size:2rem;margin-bottom:0.4rem">📅</div>
+        <div class="t-heading" id="bk-empty-title">No ${escHtml(L.bookings.toLowerCase())} in this view</div>
+        <p class="t-caption" id="bk-empty-sub" style="margin:0.35rem 0 1.15rem">Try switching to All dates or create a walk-in booking.</p>
+        <div style="display:inline-flex;gap:0.5rem;flex-wrap:wrap;justify-content:center">
+          <button type="button" class="btn btn-soft-blue btn-sm" onclick="setBookingStatusChip('');setBookingsRange('all')">Show All ${escHtml(L.bookings)}</button>
+          <button type="button" class="btn btn-primary btn-sm" onclick="openNewBookingModal()">+ New ${escHtml(L.booking)}</button>
         </div>
-        <div id="bk-pager" class="hidden" style="display:flex;justify-content:space-between;align-items:center;margin-top:1rem;padding-top:0.85rem;border-top:0.5px solid var(--hairline)">
-          <span id="bk-count" class="t-caption"></span>
-          <div style="display:flex;gap:0.4rem">
-            <button id="bk-prev" class="btn btn-secondary btn-sm" onclick="bookingsPage--;loadBookings()">Previous</button>
-            <button id="bk-next" class="btn btn-secondary btn-sm" onclick="bookingsPage++;loadBookings()">Next</button>
-          </div>
+      </div>
+
+      <div id="bk-pager" class="hidden" style="display:flex;justify-content:space-between;align-items:center;margin-top:0.85rem;padding:0 0.25rem">
+        <span id="bk-count" class="t-caption"></span>
+        <div style="display:flex;gap:0.4rem">
+          <button id="bk-prev" class="btn btn-secondary btn-sm" onclick="bookingsPage--;loadBookings()">Previous</button>
+          <button id="bk-next" class="btn btn-secondary btn-sm" onclick="bookingsPage++;loadBookings()">Next</button>
         </div>
       </div>
     </div>`;
 
-  // Wire spring segmented controls (Status + List/Agenda View)
-  const seg = document.getElementById('bk-status-seg');
+  // Wire Spring View Segmented Control
   const viewSeg = document.getElementById('bk-view-seg');
-  state.bookingStatusFilter = '';
-  requestAnimationFrame(() => {
-    updateSegmentedThumb(seg, false);
-    if (viewSeg) updateSegmentedThumb(viewSeg, false);
-  });
-  seg.querySelectorAll('button').forEach(btn => {
-    btn.onclick = () => {
-      seg.querySelectorAll('button').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      updateSegmentedThumb(seg, true);
-      haptic(5);
-      state.bookingStatusFilter = btn.dataset.val;
-      bookingsPage = 1;
-      loadBookings();
-    };
-  });
   if (viewSeg) {
+    requestAnimationFrame(() => updateSegmentedThumb(viewSeg, false));
     viewSeg.querySelectorAll('button').forEach(btn => {
       btn.onclick = () => {
         viewSeg.querySelectorAll('button').forEach(b => b.classList.remove('active'));
@@ -1740,20 +2037,24 @@ async function renderBookings() {
         haptic(5);
         bookingsViewMode = btn.dataset.view;
         localStorage.setItem('bb_bk_view', bookingsViewMode);
-        const tw = document.getElementById('bk-table-wrap');
-        const aw = document.getElementById('bk-agenda-wrap');
-        if (tw) tw.classList.toggle('hidden', bookingsViewMode === 'agenda');
-        if (aw) {
-          aw.classList.toggle('hidden', bookingsViewMode !== 'agenda');
-          aw.style.display = bookingsViewMode === 'agenda' ? 'grid' : 'none';
-        }
-        renderBookingsAgenda(state.bookings || []);
+        renderBookingsViews();
       };
     });
   }
 
+  // Instant live search
+  const searchEl = document.getElementById('bk-search');
+  if (searchEl) {
+    searchEl.addEventListener('input', debounce((e) => {
+      bookingsSearchQuery = (e.target.value || '').trim().toLowerCase();
+      renderBookingsViews();
+    }, 120));
+  }
+
+  // Load Staff dropdown
   try {
     const staff = await apiGet('/staff');
+    state.staff = staff || [];
     const sel = document.getElementById('bk-staff');
     (staff || []).forEach(s => {
       const o = document.createElement('option');
@@ -1766,104 +2067,324 @@ async function renderBookings() {
 }
 
 async function loadBookings() {
-  const params = new URLSearchParams({ page: bookingsPage, per_page: 20 });
-  const fd = document.getElementById('bk-from')?.value;
-  const td = document.getElementById('bk-to')?.value;
-  const st = state.bookingStatusFilter;
+  const { from, to } = getBookingRangeBounds();
+  const params = new URLSearchParams({ page: bookingsPage, per_page: 100 });
   const staffId = document.getElementById('bk-staff')?.value;
-  if (fd) params.set('from_date', fd);
-  if (td) params.set('to_date', td);
-  if (st) params.set('status', st);
+  if (from) params.set('from_date', from);
+  if (to) params.set('to_date', to);
   if (staffId) params.set('staff_id', staffId);
 
-  const tbody = document.getElementById('bk-tbody');
-  tbody.innerHTML = `<tr><td colspan="6" style="padding:1.5rem"><div class="skeleton" style="height:28px"></div></td></tr>`;
+  const tlWrap = document.getElementById('bk-timeline-wrap');
+  if (tlWrap && bookingsViewMode === 'timeline') {
+    tlWrap.innerHTML = `<div class="card"><div class="skeleton" style="height:120px"></div></div>`;
+  }
 
   try {
     const data = await apiGet(`/bookings?${params}`);
     const items = data.items || [];
+    bookingsRawItems = items;
     state.bookings = items;
-    if (!items.length) {
-      tbody.innerHTML = '';
-      document.getElementById('bk-empty').classList.remove('hidden');
-      document.getElementById('bk-pager').classList.add('hidden');
-      return;
-    }
-    document.getElementById('bk-empty').classList.add('hidden');
-    document.getElementById('bk-pager').classList.remove('hidden');
-    document.getElementById('bk-count').textContent = `${items.length} of ${data.total} total`;
-    document.getElementById('bk-prev').disabled = bookingsPage <= 1;
-    document.getElementById('bk-next').disabled = bookingsPage * 20 >= data.total;
 
-    tbody.innerHTML = items.map(b => `
-      <tr onclick="showBookingDetail('${b.id}')">
-        <td>
-          <div style="font-weight:600" class="t-num">${formatDate(b.starts_at)}</div>
-          <div class="t-caption t-num">${formatTime(b.starts_at)} – ${formatTime(b.ends_at)}</div>
-        </td>
-        <td>
-          <div style="font-weight:600">${escHtml(b.customer_name || 'Walk-in')}</div>
-          <div class="t-caption t-num">${escHtml(b.customer_phone || '')}</div>
-        </td>
-        <td>${escHtml(b.service_name || '—')}</td>
-        <td style="color:var(--label-secondary)">${escHtml(b.staff_name || '—')}</td>
-        <td>
-          ${statusPill(b.status)}
-          ${b.utr_reference ? `<div style="margin-top:4px"><span class="pill t-mono" style="font-size:0.7rem;background:${b.payment_status === 'submitted_utr' ? 'var(--amber-soft)' : 'var(--green-soft)'};color:${b.payment_status === 'submitted_utr' ? 'var(--amber-text)' : 'var(--green-text)'}">UTR: ${escHtml(b.utr_reference)}</span></div>` : ''}
-        </td>
-        <td style="text-align:right" onclick="event.stopPropagation()">
-          <div style="display:inline-flex;gap:0.3rem">
-            ${b.status === 'pending_deposit' ? `
-              <button class="btn btn-soft-green btn-sm" onclick="changeBookingStatus('${b.id}','confirmed')">Confirm</button>
-              <button class="btn btn-soft-red btn-sm" onclick="changeBookingStatus('${b.id}','cancelled')">Cancel</button>
-            ` : ''}
-            ${b.status === 'confirmed' ? `
-              <button class="btn btn-soft-blue btn-sm" onclick="changeBookingStatus('${b.id}','completed')">Complete</button>
-              <button class="btn btn-secondary btn-sm" onclick="changeBookingStatus('${b.id}','no_show')">No Show</button>
-              <button class="btn btn-soft-red btn-sm" onclick="changeBookingStatus('${b.id}','cancelled')">Cancel</button>
-            ` : ''}
-          </div>
-        </td>
-      </tr>`).join('');
-    renderBookingsAgenda(items);
+    // Update pager
+    const pager = document.getElementById('bk-pager');
+    if (data.total > 100) {
+      pager.classList.remove('hidden');
+      document.getElementById('bk-count').textContent = `Showing ${items.length} of ${data.total}`;
+      document.getElementById('bk-prev').disabled = bookingsPage <= 1;
+      document.getElementById('bk-next').disabled = bookingsPage * 100 >= data.total;
+    } else {
+      pager.classList.add('hidden');
+    }
+
+    renderBookingInsights(items);
+    renderBookingsViews();
   } catch (e) {}
 }
 
-function renderBookingsAgenda(items) {
-  const wrap = document.getElementById('bk-agenda-wrap');
-  if (!wrap) return;
-  if (!items || !items.length) {
-    wrap.innerHTML = '';
+function renderBookingInsights(allItems) {
+  const L = getLabels();
+  const counts = { all: allItems.length, confirmed: 0, pending_deposit: 0, completed: 0, cancelled: 0, no_show: 0 };
+  let activeRevPaise = 0;
+  let completedRevPaise = 0;
+  let submittedUtrCount = 0;
+  const nowMs = Date.now();
+  let nextUp = null;
+
+  allItems.forEach(b => {
+    if (counts[b.status] != null) counts[b.status] += 1;
+    const price = Number(b.service_price_paise || 0);
+    if (b.status === 'confirmed' || b.status === 'completed' || b.status === 'pending_deposit') {
+      activeRevPaise += price;
+    }
+    if (b.status === 'completed') completedRevPaise += price;
+    if (b.status === 'pending_deposit' && b.payment_status === 'submitted_utr') submittedUtrCount += 1;
+    if ((b.status === 'confirmed' || b.status === 'pending_deposit') && b.starts_at) {
+      const t = new Date(b.starts_at).getTime();
+      if (t >= nowMs - 15 * 60 * 1000 && (!nextUp || t < new Date(nextUp.starts_at).getTime())) {
+        nextUp = b;
+      }
+    }
+  });
+
+  // Update status chip counts
+  ['all', 'confirmed', 'pending_deposit', 'completed', 'cancelled'].forEach(k => {
+    const el = document.getElementById(`cnt-${k}`);
+    if (el) el.textContent = String(counts[k] || 0);
+  });
+
+  // Top 4 insight cards
+  const insEl = document.getElementById('bk-insights');
+  if (insEl) {
+    const pendingCount = counts.pending_deposit;
+    const rangeLabelMap = { today: 'Selected Day', tomorrow: 'Tomorrow', week: 'Next 7 Days', upcoming: 'Upcoming', all: 'All Time', custom: 'Custom Range' };
+    const rangeLabel = rangeLabelMap[bookingsRangeMode] || 'Schedule';
+    insEl.innerHTML = `
+      <div class="bk-stat">
+        <span class="t-micro">${escHtml(rangeLabel)} · ${escHtml(L.bookings)}</span>
+        <div class="bk-stat-val">${counts.all}</div>
+        <span class="t-caption">${counts.confirmed} confirmed · ${counts.completed} completed</span>
+      </div>
+      <div class="bk-stat">
+        <span class="t-micro">Expected Revenue</span>
+        <div class="bk-stat-val" style="color:var(--green-text)">${formatCurrency(activeRevPaise)}</div>
+        <span class="t-caption">${completedRevPaise > 0 ? `${formatCurrency(completedRevPaise)} completed` : 'From active slots in view'}</span>
+      </div>
+      <div class="bk-stat ${nextUp ? 'clickable' : ''}" ${nextUp ? `onclick="showBookingDetail('${nextUp.id}')"` : ''}>
+        <span class="t-micro">Next Up</span>
+        ${nextUp ? `
+          <div style="font-size:1.05rem;font-weight:700;letter-spacing:-0.015em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(nextUp.customer_name || 'Walk-in')}</div>
+          <span class="t-caption t-num" style="color:var(--blue);font-weight:600">${formatTime(nextUp.starts_at)} · ${escHtml(nextUp.service_name || L.booking)}</span>
+        ` : `
+          <div style="font-size:1.05rem;font-weight:700;color:var(--label-secondary)">All caught up</div>
+          <span class="t-caption">No upcoming slots remaining</span>
+        `}
+      </div>
+      <div class="bk-stat ${pendingCount > 0 ? 'alert clickable' : ''}" ${pendingCount > 0 ? `onclick="setBookingStatusChip('pending_deposit')"` : ''}>
+        <span class="t-micro">Deposit Verification</span>
+        <div class="bk-stat-val" style="color:${pendingCount > 0 ? 'var(--orange-text)' : 'var(--green-text)'}">
+          ${pendingCount > 0 ? `${pendingCount} Pending` : 'All Clear'}
+        </div>
+        <span class="t-caption">
+          ${pendingCount > 0
+            ? (submittedUtrCount > 0 ? `${submittedUtrCount} UTR ready to verify →` : 'Tap to review holds →')
+            : '0 deposits waiting'}
+        </span>
+      </div>`;
+  }
+
+  // Conditional attention strip
+  const attEl = document.getElementById('bk-attention');
+  if (attEl) {
+    if (counts.pending_deposit > 0 && state.bookingStatusFilter !== 'pending_deposit') {
+      attEl.classList.remove('hidden');
+      attEl.innerHTML = `
+        <span>⚡ <strong>${counts.pending_deposit} ${counts.pending_deposit === 1 ? 'deposit' : 'deposits'}</strong> waiting for verification${submittedUtrCount > 0 ? ` (${submittedUtrCount} customer UTR submitted)` : ''}.</span>
+        <button type="button" class="btn btn-sm" style="background:var(--surface);color:var(--orange-text);box-shadow:0 1px 2px rgba(0,0,0,0.08)" onclick="setBookingStatusChip('pending_deposit')">Review Pending →</button>`;
+    } else {
+      attEl.classList.add('hidden');
+    }
+  }
+}
+
+function getFilteredBookings() {
+  let list = bookingsRawItems.slice();
+  if (state.bookingStatusFilter) {
+    list = list.filter(b => b.status === state.bookingStatusFilter);
+  }
+  if (bookingsSearchQuery) {
+    const q = bookingsSearchQuery;
+    list = list.filter(b =>
+      (b.customer_name || '').toLowerCase().includes(q) ||
+      (b.customer_phone || '').toLowerCase().includes(q) ||
+      (b.service_name || '').toLowerCase().includes(q) ||
+      (b.staff_name || '').toLowerCase().includes(q) ||
+      (b.utr_reference || '').toLowerCase().includes(q)
+    );
+  }
+  // Chronological earliest-first for upcoming/day views; newest-first only for 'all'
+  const asc = bookingsRangeMode !== 'all';
+  list.sort((a, b) => asc
+    ? new Date(a.starts_at) - new Date(b.starts_at)
+    : new Date(b.starts_at) - new Date(a.starts_at));
+  return list;
+}
+
+function bookingPrimaryActionHtml(b) {
+  if (b.status === 'pending_deposit') {
+    return `<button type="button" class="btn btn-soft-green btn-sm" onclick="changeBookingStatus('${b.id}','confirmed')">✓ Confirm</button>`;
+  }
+  if (b.status === 'confirmed') {
+    return `<button type="button" class="btn btn-soft-blue btn-sm" onclick="changeBookingStatus('${b.id}','completed')">✓ Complete</button>`;
+  }
+  return '';
+}
+
+function bookingUtrPillHtml(b) {
+  if (!b.utr_reference) return '';
+  const isSubmitted = b.payment_status === 'submitted_utr';
+  return `<span class="pill t-mono" style="font-size:0.69rem;background:${isSubmitted ? 'var(--orange-soft)' : 'var(--green-soft)'};color:${isSubmitted ? 'var(--orange-text)' : 'var(--green-text)'}">UTR: ${escHtml(b.utr_reference)}</span>`;
+}
+
+function renderBookingsViews() {
+  const items = getFilteredBookings();
+  const tlWrap = document.getElementById('bk-timeline-wrap');
+  const teamWrap = document.getElementById('bk-team-wrap');
+  const tableCard = document.getElementById('bk-table-card');
+  const emptyEl = document.getElementById('bk-empty');
+
+  if (!items.length) {
+    if (tlWrap) { tlWrap.classList.add('hidden'); tlWrap.innerHTML = ''; }
+    if (teamWrap) { teamWrap.classList.add('hidden'); teamWrap.innerHTML = ''; }
+    if (tableCard) tableCard.classList.add('hidden');
+    if (emptyEl) emptyEl.classList.remove('hidden');
     return;
   }
-  const byStaff = {};
-  items.slice().sort((a, b) => new Date(a.starts_at) - new Date(b.starts_at)).forEach(b => {
-    const key = b.staff_name || 'Unassigned';
-    if (!byStaff[key]) byStaff[key] = [];
-    byStaff[key].push(b);
+
+  if (emptyEl) emptyEl.classList.add('hidden');
+  if (tlWrap) tlWrap.classList.toggle('hidden', bookingsViewMode !== 'timeline');
+  if (teamWrap) teamWrap.classList.toggle('hidden', bookingsViewMode !== 'team');
+  if (tableCard) tableCard.classList.toggle('hidden', bookingsViewMode !== 'table');
+
+  if (bookingsViewMode === 'timeline') renderBookingsTimeline(items);
+  else if (bookingsViewMode === 'team') renderBookingsTeam(items);
+  else renderBookingsTable(items);
+}
+
+function renderBookingsTimeline(items) {
+  const wrap = document.getElementById('bk-timeline-wrap');
+  if (!wrap) return;
+  const barColor = { confirmed: 'var(--blue)', pending_deposit: 'var(--orange)', completed: 'var(--green)', cancelled: 'var(--label-tertiary)', no_show: 'var(--red)' };
+
+  const groups = [];
+  const byDay = new Map();
+  items.forEach(b => {
+    const key = localDateKey(b.starts_at);
+    if (!byDay.has(key)) {
+      const grp = { key, items: [], revenue: 0 };
+      byDay.set(key, grp);
+      groups.push(grp);
+    }
+    const g = byDay.get(key);
+    g.items.push(b);
+    if (b.status !== 'cancelled' && b.status !== 'no_show') {
+      g.revenue += Number(b.service_price_paise || 0);
+    }
   });
-  const borderCol = { confirmed: 'var(--blue)', pending_deposit: 'var(--orange)', completed: 'var(--green)', cancelled: 'var(--label-tertiary)', no_show: 'var(--red)' };
-  wrap.innerHTML = Object.entries(byStaff).map(([staffName, list]) => `
-    <div style="background:var(--surface-secondary);border-radius:16px;padding:0.9rem;display:flex;flex-direction:column;gap:0.65rem;border:0.5px solid var(--hairline)">
-      <div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:0.5rem;border-bottom:0.5px solid var(--hairline)">
-        <strong style="font-size:0.9rem">${escHtml(staffName)}</strong>
-        <span class="pill" style="background:var(--surface);color:var(--label-secondary)">${list.length}</span>
+
+  wrap.innerHTML = groups.map(g => `
+    <div class="bk-day-group">
+      <div class="bk-day-head">
+        <span class="bk-day-title">${escHtml(formatDayGroupHeader(g.key))}</span>
+        <span class="bk-day-meta">${g.items.length} ${g.items.length === 1 ? 'slot' : 'slots'}${g.revenue > 0 ? ` · ${formatCurrency(g.revenue)}` : ''}</span>
       </div>
-      ${list.map(b => `
-        <div onclick="showBookingDetail('${b.id}')" class="interactive" style="background:var(--surface);border-radius:12px;padding:0.75rem 0.8rem;border-left:3.5px solid ${borderCol[b.status] || 'var(--blue)'};cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,0.05)">
+      <div class="bk-group-card">
+        ${g.items.map(b => {
+          const initial = (b.customer_name || 'W')[0].toUpperCase();
+          const durTxt = b.duration_minutes ? `${b.duration_minutes} min` : formatTime(b.ends_at);
+          return `
+            <div class="bk-row" onclick="showBookingDetail('${b.id}')">
+              <div class="bk-row-time">
+                <div style="font-weight:700;font-size:0.86rem" class="t-num">${formatTime(b.starts_at)}</div>
+                <div class="t-caption t-num">${escHtml(durTxt)}</div>
+              </div>
+              <div class="bk-row-bar" style="background:${barColor[b.status] || 'var(--blue)'}"></div>
+              <div class="bk-avatar">${escHtml(initial)}</div>
+              <div class="bk-row-main">
+                <div class="bk-row-top">
+                  <strong style="font-size:0.92rem">${escHtml(b.customer_name || 'Walk-in')}</strong>
+                  ${statusPill(b.status)}
+                  ${bookingUtrPillHtml(b)}
+                </div>
+                <div class="bk-row-sub">
+                  <span style="color:var(--label);font-weight:500">${escHtml(b.service_name || '—')}</span>
+                  <span>·</span>
+                  <span>${escHtml(b.staff_name || 'Unassigned')}</span>
+                  ${b.service_price_paise != null ? `<span>·</span><span class="t-num" style="font-weight:600;color:var(--label)">${formatCurrency(b.service_price_paise)}</span>` : ''}
+                  ${b.customer_phone ? `<span>·</span><span class="t-num" style="color:var(--label-tertiary)">${escHtml(b.customer_phone)}</span>` : ''}
+                </div>
+              </div>
+              <div class="bk-row-actions" onclick="event.stopPropagation()">
+                ${bookingPrimaryActionHtml(b)}
+                <span class="bk-chev" aria-hidden="true">›</span>
+              </div>
+            </div>`;
+        }).join('')}
+      </div>
+    </div>`).join('');
+}
+
+function renderBookingsTeam(items) {
+  const wrap = document.getElementById('bk-team-wrap');
+  if (!wrap) return;
+  const borderCol = { confirmed: 'var(--blue)', pending_deposit: 'var(--orange)', completed: 'var(--green)', cancelled: 'var(--label-tertiary)', no_show: 'var(--red)' };
+  const byStaff = {};
+  items.forEach(b => {
+    const key = b.staff_name || 'Unassigned';
+    if (!byStaff[key]) byStaff[key] = { items: [], revenue: 0 };
+    byStaff[key].items.push(b);
+    if (b.status !== 'cancelled' && b.status !== 'no_show') {
+      byStaff[key].revenue += Number(b.service_price_paise || 0);
+    }
+  });
+
+  wrap.innerHTML = Object.entries(byStaff).map(([staffName, grp]) => `
+    <div class="bk-lane">
+      <div class="bk-lane-head">
+        <div style="display:flex;align-items:center;gap:0.55rem">
+          <div class="bk-avatar" style="width:30px;height:30px;font-size:0.75rem">${escHtml(staffName[0].toUpperCase())}</div>
+          <div>
+            <strong style="font-size:0.9rem;display:block;line-height:1.15">${escHtml(staffName)}</strong>
+            <span class="t-caption t-num">${grp.items.length} ${grp.items.length === 1 ? 'slot' : 'slots'}${grp.revenue > 0 ? ` · ${formatCurrency(grp.revenue)}` : ''}</span>
+          </div>
+        </div>
+      </div>
+      ${grp.items.map(b => `
+        <div onclick="showBookingDetail('${b.id}')" class="bk-lane-card" style="border-left-color:${borderCol[b.status] || 'var(--blue)'}">
           <div style="display:flex;justify-content:space-between;align-items:center;gap:0.4rem">
-            <span class="t-caption t-num" style="font-weight:600;color:var(--label)">${formatDate(b.starts_at)} · ${formatTime(b.starts_at)}</span>
+            <span class="t-caption t-num" style="font-weight:700;color:var(--label)">${formatTime(b.starts_at)} · ${formatDate(b.starts_at).replace(/ \d{4}$/, '')}</span>
             ${statusPill(b.status)}
           </div>
           <div style="font-weight:700;font-size:0.9rem;margin-top:4px">${escHtml(b.customer_name || 'Walk-in')}</div>
-          <div class="t-caption">${escHtml(b.service_name || '—')}</div>
-          ${b.utr_reference ? `<div style="margin-top:5px"><span class="pill t-mono" style="font-size:0.68rem;background:${b.payment_status === 'submitted_utr' ? 'var(--amber-soft)' : 'var(--green-soft)'};color:${b.payment_status === 'submitted_utr' ? 'var(--amber-text)' : 'var(--green-text)'}">UTR: ${escHtml(b.utr_reference)}</span></div>` : ''}
-          <div style="display:flex;gap:0.3rem;margin-top:0.55rem" onclick="event.stopPropagation()">
-            ${b.status === 'pending_deposit' ? `<button class="btn btn-soft-green btn-sm" style="padding:3px 9px;font-size:0.72rem" onclick="changeBookingStatus('${b.id}','confirmed')">Confirm</button>` : ''}
-            ${b.status === 'confirmed' ? `<button class="btn btn-soft-blue btn-sm" style="padding:3px 9px;font-size:0.72rem" onclick="changeBookingStatus('${b.id}','completed')">Complete</button>` : ''}
+          <div class="t-caption" style="display:flex;justify-content:space-between;gap:0.4rem;margin-top:2px">
+            <span>${escHtml(b.service_name || '—')}</span>
+            <strong class="t-num" style="color:var(--label)">${b.service_price_paise != null ? formatCurrency(b.service_price_paise) : ''}</strong>
           </div>
+          ${b.utr_reference ? `<div style="margin-top:5px">${bookingUtrPillHtml(b)}</div>` : ''}
+          ${(b.status === 'pending_deposit' || b.status === 'confirmed') ? `
+            <div style="display:flex;gap:0.35rem;margin-top:0.55rem" onclick="event.stopPropagation()">
+              ${bookingPrimaryActionHtml(b)}
+            </div>` : ''}
         </div>`).join('')}
     </div>`).join('');
+}
+
+function renderBookingsTable(items) {
+  const tbody = document.getElementById('bk-tbody');
+  if (!tbody) return;
+  tbody.innerHTML = items.map(b => `
+    <tr onclick="showBookingDetail('${b.id}')">
+      <td>
+        <div style="font-weight:600" class="t-num">${formatDate(b.starts_at)}</div>
+        <div class="t-caption t-num">${formatTime(b.starts_at)} – ${formatTime(b.ends_at)}</div>
+      </td>
+      <td>
+        <div style="font-weight:600">${escHtml(b.customer_name || 'Walk-in')}</div>
+        <div class="t-caption t-num">${escHtml(b.customer_phone || '')}</div>
+      </td>
+      <td>${escHtml(b.service_name || '—')}</td>
+      <td style="color:var(--label-secondary)">${escHtml(b.staff_name || '—')}</td>
+      <td class="t-num" style="font-weight:600">${b.service_price_paise != null ? formatCurrency(b.service_price_paise) : '—'}</td>
+      <td>
+        ${statusPill(b.status)}
+        ${b.utr_reference ? `<div style="margin-top:4px">${bookingUtrPillHtml(b)}</div>` : ''}
+      </td>
+      <td style="text-align:right" onclick="event.stopPropagation()">
+        <div style="display:inline-flex;align-items:center;gap:0.35rem">
+          ${bookingPrimaryActionHtml(b)}
+          <span class="bk-chev" onclick="showBookingDetail('${b.id}')" style="cursor:pointer">›</span>
+        </div>
+      </td>
+    </tr>`).join('');
 }
 
 async function changeBookingStatus(id, newStatus) {
@@ -1890,12 +2411,16 @@ async function showBookingDetail(id) {
   const L = getLabels();
   try {
     const b = await apiGet(`/bookings/${id}`);
+    const waDigits = (b.customer_phone || '').replace(/[^\d]/g, '');
     openSheet(`${L.booking} Inspector`, `
       <div style="display:flex;flex-direction:column;gap:1.15rem">
         <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:1rem">
           <div>
             <div class="t-title">${escHtml(b.customer_name || L.customer)}</div>
-            <div class="t-caption t-num" style="margin-top:2px">${escHtml(b.customer_phone || '')}</div>
+            <div style="display:flex;align-items:center;gap:0.5rem;margin-top:3px;flex-wrap:wrap">
+              <span class="t-caption t-num">${escHtml(b.customer_phone || '')}</span>
+              ${waDigits ? `<a href="https://wa.me/${waDigits}" target="_blank" rel="noopener" class="pill" style="background:var(--green-soft);color:var(--green-text);text-decoration:none">💬 WhatsApp</a>` : ''}
+            </div>
           </div>
           ${statusPill(b.status)}
         </div>
@@ -1910,7 +2435,7 @@ async function showBookingDetail(id) {
         </div>
 
         ${(b.status === 'pending_deposit' || b.utr_reference || b.payment_status) ? `
-        <div class="card card-tight" style="background:${b.payment_status === 'submitted_utr' ? 'var(--amber-soft)' : 'var(--surface-secondary)'};box-shadow:none;display:flex;flex-direction:column;gap:0.45rem">
+        <div class="card card-tight" style="background:${b.payment_status === 'submitted_utr' ? 'var(--orange-soft)' : 'var(--surface-secondary)'};box-shadow:none;display:flex;flex-direction:column;gap:0.45rem">
           <div style="display:flex;justify-content:space-between;align-items:center">
             <span class="t-micro">Deposit &amp; Payment Verification</span>
             <span class="pill ${b.payment_status === 'captured' ? 'pill-confirmed' : 'pill-pending_deposit'}">${b.payment_status === 'submitted_utr' ? 'UTR Submitted — Verify' : (b.payment_status === 'captured' ? 'Verified & Paid' : 'Awaiting Payment')}</span>
