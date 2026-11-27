@@ -1492,6 +1492,35 @@ async function renderHome() {
         </div>
       </div>` : ''}
 
+      ${(!state.tenant?.waba_phone_number_id || !state.tenantSettings?.google_maps_url) ? `
+      <div class="card" style="margin-bottom:1.15rem;padding:1.1rem 1.25rem">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.5rem;margin-bottom:0.8rem">
+          <div>
+            <div class="t-micro" style="color:var(--blue)">Quick Launch Checklist</div>
+            <div class="t-heading" style="margin-top:2px">Finish setting up ${escHtml(state.tenant?.business_name || 'your business')}</div>
+          </div>
+          <span class="pill pill-confirmed">${[true, !!state.tenant?.waba_phone_number_id, !!state.tenantSettings?.google_maps_url, !!state.tenantSettings?.google_review_url].filter(Boolean).length} / 4 Ready</span>
+        </div>
+        <div class="grid-2" style="gap:0.6rem">
+          <a href="#services" class="interactive" style="display:flex;align-items:center;gap:0.65rem;padding:0.7rem 0.85rem;border-radius:12px;background:var(--surface-secondary);text-decoration:none;color:var(--label)">
+            <span class="pill pill-confirmed" style="padding:2px 7px">✓</span>
+            <div><div style="font-size:0.84rem;font-weight:600">Services &amp; Slot Intervals</div><div class="t-caption">Configure per-service durations &amp; prices</div></div>
+          </a>
+          <a href="#settings" class="interactive" style="display:flex;align-items:center;gap:0.65rem;padding:0.7rem 0.85rem;border-radius:12px;background:var(--surface-secondary);text-decoration:none;color:var(--label)">
+            <span class="pill ${state.tenant?.waba_phone_number_id ? 'pill-confirmed' : 'pill-pending_deposit'}" style="padding:2px 7px">${state.tenant?.waba_phone_number_id ? '✓' : '2'}</span>
+            <div><div style="font-size:0.84rem;font-weight:600">Connect WhatsApp Business</div><div class="t-caption">${state.tenant?.waba_phone_number_id ? 'Connected & ready' : '1-click Meta connect or manual setup'}</div></div>
+          </a>
+          <a href="#settings" class="interactive" style="display:flex;align-items:center;gap:0.65rem;padding:0.7rem 0.85rem;border-radius:12px;background:var(--surface-secondary);text-decoration:none;color:var(--label)">
+            <span class="pill ${state.tenantSettings?.google_maps_url ? 'pill-confirmed' : 'pill-pending_deposit'}" style="padding:2px 7px">${state.tenantSettings?.google_maps_url ? '✓' : '3'}</span>
+            <div><div style="font-size:0.84rem;font-weight:600">Google Maps &amp; Review Link</div><div class="t-caption">${state.tenantSettings?.google_maps_url ? 'Included in confirmations' : 'Auto-send directions & free 24h reviews'}</div></div>
+          </a>
+          <a href="#simulator" class="interactive" style="display:flex;align-items:center;gap:0.65rem;padding:0.7rem 0.85rem;border-radius:12px;background:var(--surface-secondary);text-decoration:none;color:var(--label)">
+            <span class="pill pill-confirmed" style="padding:2px 7px">▶</span>
+            <div><div style="font-size:0.84rem;font-weight:600">Test in WhatsApp Simulator</div><div class="t-caption">Preview your live booking chat flow</div></div>
+          </a>
+        </div>
+      </div>` : ''}
+
       <div class="kpi-grid">
         <div class="kpi-card">
           <div class="kpi-top">
@@ -1619,6 +1648,7 @@ async function renderHome() {
    2. BOOKINGS (With Spring Segmented Control + Slide-Over Inspector Sheet)
    ========================================================================== */
 let bookingsPage = 1;
+let bookingsViewMode = localStorage.getItem('bb_bk_view') || 'list';
 
 async function renderBookings() {
   const L = getLabels();
@@ -1628,13 +1658,20 @@ async function renderBookings() {
     <div class="view-enter">
       <div class="card">
         <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:0.75rem;margin-bottom:1.1rem">
-          <div class="segmented" id="bk-status-seg">
-            <div class="segmented-thumb"></div>
-            <button data-val="" class="active">All</button>
-            <button data-val="confirmed">Confirmed</button>
-            <button data-val="pending_deposit">Pending</button>
-            <button data-val="completed">Completed</button>
-            <button data-val="cancelled">Cancelled</button>
+          <div style="display:flex;flex-wrap:wrap;align-items:center;gap:0.6rem">
+            <div class="segmented" id="bk-status-seg">
+              <div class="segmented-thumb"></div>
+              <button data-val="" class="active">All</button>
+              <button data-val="confirmed">Confirmed</button>
+              <button data-val="pending_deposit">Pending</button>
+              <button data-val="completed">Completed</button>
+              <button data-val="cancelled">Cancelled</button>
+            </div>
+            <div class="segmented" id="bk-view-seg">
+              <div class="segmented-thumb"></div>
+              <button data-view="list" class="${bookingsViewMode === 'list' ? 'active' : ''}">☰ List</button>
+              <button data-view="agenda" class="${bookingsViewMode === 'agenda' ? 'active' : ''}">▦ Staff Agenda</button>
+            </div>
           </div>
           <div style="display:flex;flex-wrap:wrap;gap:0.5rem;align-items:center">
             <input type="date" id="bk-from" class="input" style="width:auto" value="${todayStr()}">
@@ -1644,7 +1681,7 @@ async function renderBookings() {
           </div>
         </div>
 
-        <div class="table-wrap">
+        <div id="bk-table-wrap" class="table-wrap ${bookingsViewMode === 'agenda' ? 'hidden' : ''}">
           <table class="apple-table">
             <thead>
               <tr>
@@ -1659,6 +1696,7 @@ async function renderBookings() {
             <tbody id="bk-tbody"></tbody>
           </table>
         </div>
+        <div id="bk-agenda-wrap" class="${bookingsViewMode === 'agenda' ? '' : 'hidden'}" style="display:${bookingsViewMode === 'agenda' ? 'grid' : 'none'};grid-template-columns:repeat(auto-fit,minmax(255px,1fr));gap:0.9rem"></div>
         <div id="bk-empty" class="hidden" style="text-align:center;padding:3rem 1rem">
           <div class="t-heading">No ${escHtml(L.bookings.toLowerCase())} found</div>
           <p class="t-caption" style="margin:0.35rem 0 1rem">Try clearing the date filter or create a walk-in booking.</p>
@@ -1674,10 +1712,14 @@ async function renderBookings() {
       </div>
     </div>`;
 
-  // Wire spring segmented control
+  // Wire spring segmented controls (Status + List/Agenda View)
   const seg = document.getElementById('bk-status-seg');
+  const viewSeg = document.getElementById('bk-view-seg');
   state.bookingStatusFilter = '';
-  requestAnimationFrame(() => updateSegmentedThumb(seg, false));
+  requestAnimationFrame(() => {
+    updateSegmentedThumb(seg, false);
+    if (viewSeg) updateSegmentedThumb(viewSeg, false);
+  });
   seg.querySelectorAll('button').forEach(btn => {
     btn.onclick = () => {
       seg.querySelectorAll('button').forEach(b => b.classList.remove('active'));
@@ -1689,6 +1731,26 @@ async function renderBookings() {
       loadBookings();
     };
   });
+  if (viewSeg) {
+    viewSeg.querySelectorAll('button').forEach(btn => {
+      btn.onclick = () => {
+        viewSeg.querySelectorAll('button').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        updateSegmentedThumb(viewSeg, true);
+        haptic(5);
+        bookingsViewMode = btn.dataset.view;
+        localStorage.setItem('bb_bk_view', bookingsViewMode);
+        const tw = document.getElementById('bk-table-wrap');
+        const aw = document.getElementById('bk-agenda-wrap');
+        if (tw) tw.classList.toggle('hidden', bookingsViewMode === 'agenda');
+        if (aw) {
+          aw.classList.toggle('hidden', bookingsViewMode !== 'agenda');
+          aw.style.display = bookingsViewMode === 'agenda' ? 'grid' : 'none';
+        }
+        renderBookingsAgenda(state.bookings || []);
+      };
+    });
+  }
 
   try {
     const staff = await apiGet('/staff');
@@ -1763,7 +1825,45 @@ async function loadBookings() {
           </div>
         </td>
       </tr>`).join('');
+    renderBookingsAgenda(items);
   } catch (e) {}
+}
+
+function renderBookingsAgenda(items) {
+  const wrap = document.getElementById('bk-agenda-wrap');
+  if (!wrap) return;
+  if (!items || !items.length) {
+    wrap.innerHTML = '';
+    return;
+  }
+  const byStaff = {};
+  items.slice().sort((a, b) => new Date(a.starts_at) - new Date(b.starts_at)).forEach(b => {
+    const key = b.staff_name || 'Unassigned';
+    if (!byStaff[key]) byStaff[key] = [];
+    byStaff[key].push(b);
+  });
+  const borderCol = { confirmed: 'var(--blue)', pending_deposit: 'var(--orange)', completed: 'var(--green)', cancelled: 'var(--label-tertiary)', no_show: 'var(--red)' };
+  wrap.innerHTML = Object.entries(byStaff).map(([staffName, list]) => `
+    <div style="background:var(--surface-secondary);border-radius:16px;padding:0.9rem;display:flex;flex-direction:column;gap:0.65rem;border:0.5px solid var(--hairline)">
+      <div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:0.5rem;border-bottom:0.5px solid var(--hairline)">
+        <strong style="font-size:0.9rem">${escHtml(staffName)}</strong>
+        <span class="pill" style="background:var(--surface);color:var(--label-secondary)">${list.length}</span>
+      </div>
+      ${list.map(b => `
+        <div onclick="showBookingDetail('${b.id}')" class="interactive" style="background:var(--surface);border-radius:12px;padding:0.75rem 0.8rem;border-left:3.5px solid ${borderCol[b.status] || 'var(--blue)'};cursor:pointer;box-shadow:0 1px 3px rgba(0,0,0,0.05)">
+          <div style="display:flex;justify-content:space-between;align-items:center;gap:0.4rem">
+            <span class="t-caption t-num" style="font-weight:600;color:var(--label)">${formatDate(b.starts_at)} · ${formatTime(b.starts_at)}</span>
+            ${statusPill(b.status)}
+          </div>
+          <div style="font-weight:700;font-size:0.9rem;margin-top:4px">${escHtml(b.customer_name || 'Walk-in')}</div>
+          <div class="t-caption">${escHtml(b.service_name || '—')}</div>
+          ${b.utr_reference ? `<div style="margin-top:5px"><span class="pill t-mono" style="font-size:0.68rem;background:${b.payment_status === 'submitted_utr' ? 'var(--amber-soft)' : 'var(--green-soft)'};color:${b.payment_status === 'submitted_utr' ? 'var(--amber-text)' : 'var(--green-text)'}">UTR: ${escHtml(b.utr_reference)}</span></div>` : ''}
+          <div style="display:flex;gap:0.3rem;margin-top:0.55rem" onclick="event.stopPropagation()">
+            ${b.status === 'pending_deposit' ? `<button class="btn btn-soft-green btn-sm" style="padding:3px 9px;font-size:0.72rem" onclick="changeBookingStatus('${b.id}','confirmed')">Confirm</button>` : ''}
+            ${b.status === 'confirmed' ? `<button class="btn btn-soft-blue btn-sm" style="padding:3px 9px;font-size:0.72rem" onclick="changeBookingStatus('${b.id}','completed')">Complete</button>` : ''}
+          </div>
+        </div>`).join('')}
+    </div>`).join('');
 }
 
 async function changeBookingStatus(id, newStatus) {
