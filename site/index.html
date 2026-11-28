@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Tivoria — WhatsApp Booking OS for Appointment &amp; Service Businesses</title>
+<link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<meta name="theme-color" content="#007AFF">
 <meta name="description" content="Turn WhatsApp messages into confirmed appointments automatically. Zero double-bookings, automated reminders, 0%-fee UPI &amp; Razorpay deposits, and an Apple-grade dashboard for clinics, studios, consultants, salons, spas, coaching, and local service businesses.">
 <style>
 /* ==========================================================================
@@ -197,10 +199,10 @@ button, input, select { font: inherit; color: inherit; }
 .brand { display: inline-flex; align-items: center; gap: 10px; font-weight: 700; font-size: 1.05rem; letter-spacing: -0.02em; }
 .brand-mark {
   width: 30px; height: 30px; border-radius: 8px;
-  background: linear-gradient(145deg, #25D366, #128C7E); color: #FFFFFF;
-  display: grid; place-items: center;
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.35), 0 2px 8px rgba(18,140,126,0.3);
+  display: inline-grid; place-items: center; overflow: hidden; flex-shrink: 0;
+  box-shadow: 0 2px 8px rgba(0, 102, 230, 0.28);
 }
+.brand-mark svg, .brand-mark img { width: 100%; height: 100%; display: block; }
 .nav-links { display: flex; align-items: center; gap: 24px; font-size: 0.875rem; font-weight: 500; color: var(--label-secondary); }
 .nav-links a:hover { color: var(--label); }
 .nav-actions { display: flex; align-items: center; gap: 10px; }
@@ -1071,7 +1073,7 @@ html, body { overflow-x: clip; }
   <div class="container nav-inner">
     <a href="#" class="brand">
       <span class="brand-mark" aria-hidden="true">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+        <img src="/logo.svg" alt="" width="30" height="30">
       </span>
       <span>Tivoria</span>
     </a>
@@ -1620,7 +1622,7 @@ html, body { overflow-x: clip; }
   <div class="container footer-inner">
     <div style="display:flex;align-items:center;gap:10px">
       <span class="brand-mark" style="width:24px;height:24px;border-radius:6px" aria-hidden="true">
-        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+        <img src="/logo.svg" alt="" width="24" height="24">
       </span>
       <span><strong style="color:var(--label)">Tivoria</strong> &middot; WhatsApp-first Appointment OS</span>
     </div>

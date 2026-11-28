@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="tivoriaBg" x1="8" y1="4" x2="58" y2="60" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0A84FF"/>
+      <stop offset="55%" stop-color="#0066E6"/>
+      <stop offset="100%" stop-color="#4F46E5"/>
+    </linearGradient>
+    <linearGradient id="tivoriaDot" x1="40" y1="38" x2="50" y2="49" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#4CD964"/>
+      <stop offset="100%" stop-color="#22C55E"/>
+    </linearGradient>
+  </defs>
+  <rect x="2" y="2" width="60" height="60" rx="16" fill="url(#tivoriaBg)"/>
+  <rect x="15" y="16.5" width="34" height="8" rx="4" fill="#FFFFFF"/>
+  <rect x="28" y="22.5" width="8" height="25.5" rx="4" fill="#FFFFFF"/>
+  <circle cx="45.5" cy="42.5" r="5.5" fill="url(#tivoriaDot)"/>
+</svg>
