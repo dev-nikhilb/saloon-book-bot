@@ -909,6 +909,16 @@ footer { border-top: 0.5px solid var(--separator); padding: 36px 0 48px; font-si
 }
 .vtype-card:active { transform: scale(0.97); }
 .vtype-card.active { background: var(--blue-soft); border: 1.5px solid var(--blue); color: var(--blue); }
+.vtype-card.vtype-extra { display: none; }
+.vtype-grid.expanded .vtype-card.vtype-extra { display: flex; }
+.vtype-more-btn {
+  margin-top: 10px; border: 0.5px solid var(--separator); background: var(--surface);
+  color: var(--blue); font-size: 0.8rem; font-weight: 600; padding: 7px 14px;
+  border-radius: 999px; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+  transition: background-color 140ms ease, transform 90ms ease;
+}
+.vtype-more-btn:hover { background: var(--blue-soft); }
+.vtype-more-btn:active { transform: scale(0.97); }
 .wiz-plan-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 @media (max-width: 720px) { .wiz-plan-grid { grid-template-columns: 1fr; } }
 .wiz-plan-card {
@@ -1416,31 +1426,26 @@ html, body { overflow-x: clip; }
               <p class="wiz-sub">We&rsquo;ll pre-load matching services, slot durations, and terminology for your industry.</p>
             </div>
             <div>
-              <label style="display:block;font-size:0.78rem;font-weight:600;color:var(--label-secondary);margin-bottom:8px">Pick your industry</label>
+              <label style="display:block;font-size:0.78rem;font-weight:600;color:var(--label-secondary);margin-bottom:8px">Pick your business type</label>
+              <input type="hidden" id="sType" value="clinic">
               <div class="vtype-grid" id="vtypeGrid">
                 <button type="button" class="vtype-card active" data-vtype="clinic"><span>🏥</span><span>Medical Clinic</span></button>
                 <button type="button" class="vtype-card" data-vtype="salon"><span>💇</span><span>Salon &amp; Beauty</span></button>
                 <button type="button" class="vtype-card" data-vtype="dental"><span>🦷</span><span>Dental Clinic</span></button>
                 <button type="button" class="vtype-card" data-vtype="spa"><span>🧖</span><span>Spa &amp; Wellness</span></button>
                 <button type="button" class="vtype-card" data-vtype="consulting"><span>💼</span><span>Consulting / CA</span></button>
-                <button type="button" class="vtype-card" data-vtype="fitness"><span>🏋️</span><span>Fitness &amp; Coaching</span></button>
+                <button type="button" class="vtype-card" data-vtype="fitness"><span>🏋️</span><span>Fitness &amp; Yoga</span></button>
+                <button type="button" class="vtype-card vtype-extra" data-vtype="tutor"><span>📚</span><span>Tutor &amp; Coaching</span></button>
+                <button type="button" class="vtype-card vtype-extra" data-vtype="diagnostics"><span>🧪</span><span>Diagnostics Lab</span></button>
+                <button type="button" class="vtype-card vtype-extra" data-vtype="veterinary"><span>🐾</span><span>Veterinary Clinic</span></button>
+                <button type="button" class="vtype-card vtype-extra" data-vtype="barbershop"><span>💈</span><span>Barbershop</span></button>
+                <button type="button" class="vtype-card vtype-extra" data-vtype="beauty_parlour"><span>✨</span><span>Beauty Parlour</span></button>
+                <button type="button" class="vtype-card vtype-extra" data-vtype="home_services"><span>🛠️</span><span>Home Services</span></button>
               </div>
-              <div class="field" style="margin-top:10px">
-                <label for="sType">Or choose from all 12 supported verticals</label>
-                <select id="sType">
-                  <option value="clinic">Medical Clinic</option>
-                  <option value="dental">Dental Clinic</option>
-                  <option value="salon">Hair &amp; Beauty Salon</option>
-                  <option value="spa">Spa &amp; Wellness</option>
-                  <option value="consulting">Consulting / CA / Legal</option>
-                  <option value="fitness">Fitness &amp; Yoga Studio</option>
-                  <option value="tutor">Tutor &amp; Coaching</option>
-                  <option value="diagnostics">Diagnostics &amp; Pathology</option>
-                  <option value="veterinary">Veterinary Clinic</option>
-                  <option value="barbershop">Barbershop</option>
-                  <option value="beauty_parlour">Beauty Parlour</option>
-                  <option value="home_services">Home Services</option>
-                </select>
+              <div>
+                <button type="button" id="vtypeToggleBtn" class="vtype-more-btn" aria-expanded="false" onclick="toggleMoreBusinessTypes()">
+                  Show more businesses (+6) ▾
+                </button>
               </div>
             </div>
             <div class="field-row">
@@ -2528,19 +2533,33 @@ function nextSignupStep(target) {
   goSignupStep(target);
 }
 
+function toggleMoreBusinessTypes(forceExpand = null) {
+  const grid = document.getElementById('vtypeGrid');
+  const btn = document.getElementById('vtypeToggleBtn');
+  if (!grid || !btn) return;
+  const expanded = forceExpand != null ? forceExpand : !grid.classList.contains('expanded');
+  grid.classList.toggle('expanded', expanded);
+  btn.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+  btn.textContent = expanded ? 'Show fewer businesses ▴' : 'Show more businesses (+6) ▾';
+}
+
 function selectBusinessType(vtype) {
   const sel = document.getElementById('sType');
   if (sel) sel.value = vtype;
+  let matchedCard = null;
   document.querySelectorAll('#vtypeGrid .vtype-card').forEach((b) => {
-    b.classList.toggle('active', b.dataset.vtype === vtype);
+    const isMatch = b.dataset.vtype === vtype;
+    b.classList.toggle('active', isMatch);
+    if (isMatch) matchedCard = b;
   });
+  if (matchedCard && matchedCard.classList.contains('vtype-extra')) {
+    toggleMoreBusinessTypes(true);
+  }
 }
 
-// Sync Industry Quick-Picker Cards <-> Select Dropdown
 document.querySelectorAll('#vtypeGrid .vtype-card').forEach((btn) => {
   btn.addEventListener('click', () => selectBusinessType(btn.dataset.vtype));
 });
-document.getElementById('sType')?.addEventListener('change', (e) => selectBusinessType(e.target.value));
 
 // Reset OTP step if owner changes their email address
 document.getElementById('sEmail')?.addEventListener('input', () => {
