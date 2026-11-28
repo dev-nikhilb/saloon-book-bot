@@ -136,7 +136,7 @@ async def process_subscription_expiries(db: AsyncSession) -> dict:
     for row in res_trial_exp.fetchall():
         msg = (
             f"🔴 *Tivoria Trial Ended — {row.business_name}*\n\n"
-            f"Your 14-day free trial has ended. New customer bookings are now paused, "
+            f"Your 7-day free trial has ended. New customer bookings are now paused, "
             f"while your dashboard and existing appointments remain readable.\n\n"
             f"Pick a plan (starting ₹499/mo) to resume immediately:\n{renew_url}"
         )

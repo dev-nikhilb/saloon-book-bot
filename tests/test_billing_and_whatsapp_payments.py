@@ -576,11 +576,12 @@ async def test_trial_preserved_on_plan_switch_and_email_otp_signup(db):
     tok = resp.json()["access_token"]
     headers = {"Authorization": f"Bearer {tok}"}
 
-    # Verify owner_email & 14-day trial on pro/annual
+    # Verify owner_email & 7-day trial on pro/annual
     t_prof = client.get("/api/tenant", headers=headers).json()
     assert t_prof["owner_email"] == email
     sub0 = client.get("/api/billing/subscription", headers=headers).json()
     assert sub0["status"] == "trial"
+    assert sub0["days_remaining"] == 7
     assert sub0["plan_tier"] == "pro"
     assert sub0["billing_cycle"] == "annual"
 

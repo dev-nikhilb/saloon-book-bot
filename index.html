@@ -1109,7 +1109,7 @@ html, body { overflow-x: clip; }
           Turn every &ldquo;Hi&rdquo; on WhatsApp into a confirmed appointment 24/7&mdash;with native specialist &amp; slot pickers, zero double-bookings, 0%-fee Direct UPI deposits, Google Maps directions, and free post-visit Google Review requests.
         </p>
         <div class="hero-ctas">
-          <a href="#signup" class="btn btn-primary">Start 14-Day Free Trial</a>
+          <a href="#signup" class="btn btn-primary">Start 7-Day Free Trial</a>
           <a href="#dashboard-preview" class="btn btn-secondary">Explore Dashboard</a>
           <a href="#roi" class="btn btn-ghost">Calculate ROI &rarr;</a>
         </div>
@@ -1405,7 +1405,7 @@ html, body { overflow-x: clip; }
               <div class="k">vs Growth Plan (₹1,499/mo)</div>
             </div>
           </div>
-          <a href="#signup" class="btn btn-primary" style="width:100%">Recover This Free for 14 Days &rarr;</a>
+          <a href="#signup" class="btn btn-primary" style="width:100%">Recover This Free for 7 Days &rarr;</a>
         </div>
       </div>
     </div>
@@ -1418,7 +1418,7 @@ html, body { overflow-x: clip; }
         <div class="sec-head" style="margin-bottom:0">
           <div class="sec-kicker">Simple, Transparent Pricing</div>
           <h2 class="t-section">Pays for itself on day one.</h2>
-          <p class="t-lead">Start your 14-day free trial on Solo, Growth, or Pro. Switch anytime during trial. No credit card required.</p>
+          <p class="t-lead">Start your 7-day free trial on Solo, Growth, or Pro. Switch anytime during trial. No credit card required.</p>
         </div>
 
         <div class="segmented" id="billingSwitch" role="tablist" aria-label="Billing interval">
@@ -1436,7 +1436,7 @@ html, body { overflow-x: clip; }
   <section id="signup">
     <div class="container">
       <div class="sec-head" style="text-align:center;margin-left:auto;margin-right:auto;margin-bottom:32px">
-        <div class="sec-kicker">Start Your 14-Day Free Trial &middot; ₹0 Due Today</div>
+        <div class="sec-kicker">Start Your 7-Day Free Trial &middot; ₹0 Due Today</div>
         <h2 class="t-section">Launch your WhatsApp receptionist in 4 quick steps.</h2>
         <p class="t-lead" style="margin-left:auto;margin-right:auto">No credit card required. Starter services, hours, and booking link are ready the second you finish.</p>
       </div>
@@ -1447,7 +1447,7 @@ html, body { overflow-x: clip; }
           <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px">
             <span style="font-size:0.75rem;font-weight:600;color:var(--label-secondary)" id="wizStepCounter">Step 1 of 4</span>
             <button type="button" id="wizPlanBadge" onclick="goSignupStep(currentSignupStep >= 3 ? 3 : currentSignupStep)" style="border:0.5px solid rgba(0,122,255,0.22);background:var(--blue-soft);color:var(--blue);font-size:0.74rem;font-weight:600;padding:4px 10px;border-radius:999px;cursor:pointer">
-              14-Day Free Trial · Growth
+              7-Day Free Trial · Growth
             </button>
           </div>
           <div class="wiz-steps" role="tablist" aria-label="Signup steps">
@@ -1560,7 +1560,7 @@ html, body { overflow-x: clip; }
           <div class="wiz-pane" data-pane="3">
             <div style="display:flex;justify-content:space-between;align-items:flex-end;flex-wrap:wrap;gap:12px">
               <div>
-                <h3 class="wiz-title">3. Pick your 14-day free trial plan</h3>
+                <h3 class="wiz-title">3. Pick your 7-day free trial plan</h3>
                 <p class="wiz-sub">₹0 due today. Switch between Solo, Growth, or Pro anytime without losing trial days.</p>
               </div>
               <div class="segmented" id="wizBillingSwitch" style="padding:2px">
@@ -1593,7 +1593,7 @@ html, body { overflow-x: clip; }
             <div class="wiz-foot">
               <button type="button" class="btn btn-secondary" onclick="goSignupStep(3)">&larr; Change Plan</button>
               <button type="submit" id="signupBtn" class="btn btn-primary" style="padding:13px 26px">
-                Launch 14-Day Free Trial &rarr;
+                Launch 7-Day Free Trial &rarr;
               </button>
             </div>
           </div>
@@ -2447,7 +2447,7 @@ function renderPlansUI() {
             ${(p.features || []).map((ft) => `<li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>${esc(ft)}</li>`).join('')}
           </ul>
           <button type="button" class="btn ${isSelected ? 'btn-primary' : 'btn-secondary'}" style="width:100%" onclick="event.stopPropagation();pickSignupPlan('${p.tier}', true)">
-            Start 14-Day Trial on ${esc(p.name)}
+            Start 7-Day Trial on ${esc(p.name)}
           </button>
         </div>`;
     }).join('');
@@ -2469,7 +2469,7 @@ function renderPlansUI() {
           <div>
             <span class="t-num" style="font-size:1.6rem;font-weight:700;letter-spacing:-0.03em">${fmtInr(price)}</span>
             <span style="font-size:0.78rem;color:var(--label-secondary)">/mo</span>
-            <div style="font-size:0.72rem;color:var(--label-tertiary)">${subTxt} · ₹0 for 14 days</div>
+            <div style="font-size:0.72rem;color:var(--label-tertiary)">${subTxt} · ₹0 for 7 days</div>
           </div>
           <div style="display:flex;gap:6px;flex-wrap:wrap;font-size:0.72rem;color:var(--label-secondary)">
             <span style="padding:2px 7px;border-radius:7px;background:var(--surface)">${fmtLim(p.max_staff)} staff</span>
@@ -2490,7 +2490,7 @@ function renderPlansUI() {
   const badge = document.getElementById('wizPlanBadge');
   if (badge && chosenPlan) {
     const pPrice = isAnnual ? `${fmtInr(Math.round(chosenPlan.price_annual_inr / 12))}/mo` : `${fmtInr(chosenPlan.price_monthly_inr)}/mo`;
-    badge.textContent = `14-Day Free Trial · ${chosenPlan.name} (${pPrice} after)`;
+    badge.textContent = `7-Day Free Trial · ${chosenPlan.name} (${pPrice} after)`;
   }
   if (typeof renderWizardReview === 'function') renderWizardReview();
 }
@@ -2550,7 +2550,7 @@ function renderWizardReview() {
     <div class="wiz-rev-item"><div class="k">Business &amp; Industry</div><div class="v">${esc(biz)} · ${esc(VTYPE_NAMES[vtype] || vtype)}</div></div>
     <div class="wiz-rev-item"><div class="k">Owner &amp; Booking Link</div><div class="v">${esc(own)} · <span style="font-family:ui-monospace,monospace;font-size:0.78rem">/book/${esc(slug)}</span></div></div>
     <div class="wiz-rev-item"><div class="k">WhatsApp &amp; Email</div><div class="v">${esc(phone)} · ${esc(email)}</div></div>
-    <div class="wiz-rev-item"><div class="k">Selected Plan · Language</div><div class="v" style="color:var(--blue)">${esc(chosen.name)} (14-Day Free Trial, then ${price}) · ${esc(LANG_NAMES[lang] || lang)}</div></div>`;
+    <div class="wiz-rev-item"><div class="k">Selected Plan · Language</div><div class="v" style="color:var(--blue)">${esc(chosen.name)} (7-Day Free Trial, then ${price}) · ${esc(LANG_NAMES[lang] || lang)}</div></div>`;
 }
 
 function goSignupStep(step) {
@@ -2618,7 +2618,7 @@ document.getElementById('sEmail')?.addEventListener('input', () => {
     const otpInput = document.getElementById('sOtp');
     if (otpInput) otpInput.value = '';
     const btn = document.getElementById('signupBtn');
-    if (btn) btn.textContent = 'Launch 14-Day Free Trial →';
+    if (btn) btn.textContent = 'Launch 7-Day Free Trial →';
   }
 });
 
@@ -2882,7 +2882,7 @@ document.getElementById('signupForm').addEventListener('submit', async (e) => {
     msg.textContent = err.message;
     msg.className = 'form-msg show err';
     btn.disabled = false;
-    btn.textContent = signupOtpStepActive ? 'Verify Code & Create Workspace →' : 'Launch 14-Day Free Trial →';
+    btn.textContent = signupOtpStepActive ? 'Verify Code & Create Workspace →' : 'Launch 7-Day Free Trial →';
   }
 });
 
@@ -3115,7 +3115,7 @@ function renderDashPreview(tab) {
               Every time you tap <em>Complete</em> within 24 hours of a customer&rsquo;s chat, Tivoria automatically sends your custom Thank-You note + Google Review link at <strong>₹0 Meta cost</strong>.
             </div>
           </div>
-          <a href="#signup" class="btn btn-primary btn-sm" style="align-self:flex-start;margin-top:6px">Start 14-Day Free Trial &rarr;</a>
+          <a href="#signup" class="btn btn-primary btn-sm" style="align-self:flex-start;margin-top:6px">Start 7-Day Free Trial &rarr;</a>
         </div>
       </div>`;
   }
@@ -3176,8 +3176,8 @@ const FAQS = [
     a: 'Signup takes 30 seconds and loads industry starter services in 1 click. Connecting WhatsApp takes 60 seconds with Meta’s official popup—and our team offers free 10-minute guided screen-share setup anytime.',
   },
   {
-    q: 'What happens during and after my 14-day free trial?',
-    a: 'No credit card is required to start. You can switch between Solo, Growth, and Pro anytime during your 14-day trial without losing trial days. If you choose not to subscribe later, your customer data stays safe and existing bookings remain accessible.',
+    q: 'What happens during and after my 7-day free trial?',
+    a: 'No credit card is required to start. You can switch between Solo, Growth, and Pro anytime during your 7-day trial without losing trial days. If you choose not to subscribe later, your customer data stays safe and existing bookings remain accessible.',
   },
 ];
 

@@ -275,7 +275,7 @@ class SignupRequest(BaseModel):
     owner_email: str | None = Field(None, max_length=160, description="Owner email for OTP & billing receipts")
     business_type: str = Field("salon")
     slug: str = Field(..., min_length=2, max_length=30, pattern="^[a-z0-9][a-z0-9-]*[a-z0-9]$")
-    plan_tier: str = Field("solo", description="Initial selected plan for 14-day trial: solo, growth, or pro")
+    plan_tier: str = Field("solo", description="Initial selected plan for 7-day trial: solo, growth, or pro")
     billing_cycle: str = Field("monthly", description="monthly or annual")
     otp: str | None = Field(None, description="6-digit signup OTP (required when Email OTP is configured)")
 
@@ -370,7 +370,7 @@ async def check_slug_availability(
 
 @router.post("/auth/signup", response_model=SignupResponse, status_code=201)
 async def signup(body: SignupRequest, db: AsyncSession = Depends(get_db)):
-    """Self-service tenant registration. Creates tenant + branch + settings + owner staff + 14-day trial."""
+    """Self-service tenant registration. Creates tenant + branch + settings + owner staff + 7-day trial."""
     from app.auth.otp import is_email_otp_configured, verify_otp
     from app.billing.service import PLANS, ensure_trial_subscription
     from app.config import settings as app_settings
@@ -446,7 +446,7 @@ async def signup(body: SignupRequest, db: AsyncSession = Depends(get_db)):
         VALUES (:id, :tid, :now, :now)
     """), {"id": settings_id, "tid": tenant_id, "now": now})
 
-    # Provision 14-day free trial on the chosen plan & cycle
+    # Provision 7-day free trial on the chosen plan & cycle
     await ensure_trial_subscription(db, tenant_id, plan_tier=plan_tier, billing_cycle=billing_cycle)
 
     await db.commit()
@@ -462,7 +462,7 @@ async def signup(body: SignupRequest, db: AsyncSession = Depends(get_db)):
         slug=body.slug,
         plan_tier=plan_tier,
         dashboard_url=dashboard_url,
-        message=f"Welcome! {body.business_name} is ready on your 14-day free trial.",
+        message=f"Welcome! {body.business_name} is ready on your 7-day free trial.",
     )
 
 

@@ -100,7 +100,7 @@ FEATURE_MIN_PLAN: dict[str, str] = {
     "public_booking_page": "solo",
 }
 
-TRIAL_DAYS = 14
+TRIAL_DAYS = 7
 
 
 def get_plan(tier: str) -> dict:
@@ -137,7 +137,7 @@ async def ensure_trial_subscription(
     plan_tier: str = "solo",
     billing_cycle: str = "monthly",
 ) -> dict:
-    """Create a 14-day trial subscription if the tenant does not already have one."""
+    """Create a 7-day trial subscription if the tenant does not already have one."""
     res = await db.execute(
         text(
             "SELECT * FROM subscriptions WHERE tenant_id = :tid "
@@ -251,7 +251,7 @@ async def get_subscription_state(db: AsyncSession, tenant_id: uuid.UUID) -> dict
             days_remaining = 0
             warning_level = "expired"
             warning_message = (
-                "Your 14-day free trial has ended. New bookings are paused — choose a plan to resume immediately."
+                "Your 7-day free trial has ended. New bookings are paused — choose a plan to resume immediately."
             )
         else:
             days_remaining = max(0, math.ceil((end_dt - now).total_seconds() / 86400)) if end_dt else TRIAL_DAYS
@@ -677,8 +677,8 @@ async def create_subscription_checkout(
     """Start a subscription upgrade/renewal checkout.
 
     - Validates plan tier, billing cycle, and downgrade constraints.
-    - If tenant is in an active 14-day trial and skip_trial=False -> preserves their
-      14-day free trial while updating their chosen plan_tier & billing_cycle!
+    - If tenant is in an active 7-day trial and skip_trial=False -> preserves their
+      7-day free trial while updating their chosen plan_tier & billing_cycle!
     - When Razorpay keys + Razorpay Plan ID are configured -> creates Razorpay Subscription.
     - When Razorpay keys (no pre-created Plan ID) are configured -> creates Razorpay Order.
     - When Razorpay is not configured (dev/sandbox) -> activates immediately in sandbox mode.
@@ -690,7 +690,7 @@ async def create_subscription_checkout(
 
     await validate_plan_change(db, tenant_id, plan_tier)
 
-    # Preserve active 14-day free trial unless user explicitly skips trial to pay early
+    # Preserve active 7-day free trial unless user explicitly skips trial to pay early
     current_state = await get_subscription_state(db, tenant_id)
     if (
         not skip_trial

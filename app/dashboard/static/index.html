@@ -3921,7 +3921,7 @@ function openUpgradeModal(title, message, recommendedTier = 'growth') {
       <div style="padding:0.9rem 1rem;border-radius:12px;background:var(--surface-secondary);border:1px solid var(--hairline)">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.35rem">
           <strong style="font-size:0.92rem">Recommended: ${recName} Plan</strong>
-          <span class="pill pill-confirmed">${isTrial ? 'Free during your 14-day trial' : 'Instant unlock'}</span>
+          <span class="pill pill-confirmed">${isTrial ? 'Free during your 7-day trial' : 'Instant unlock'}</span>
         </div>
         <div class="t-caption">${recMeta}</div>
         ${isTrial ? `<div class="t-caption" style="margin-top:0.4rem;color:var(--blue)">Switching plans now keeps your remaining ${sub.days_remaining || 14} free trial days — ₹0 due today.</div>` : ''}
@@ -4029,7 +4029,7 @@ async function loadBillingBox() {
       <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.75rem;padding:0.9rem 1rem;border-radius:12px;background:${sub.is_expired ? 'var(--red-soft)' : 'var(--blue-soft)'};margin-bottom:1rem">
         <div>
           <strong style="color:${sub.is_expired ? 'var(--red-text)' : 'var(--blue)'};text-transform:uppercase;font-size:0.78rem;letter-spacing:0.05em">${escHtml(sub.plan_tier)} Plan (${escHtml(sub.billing_cycle || 'monthly')})</strong>
-          <span class="pill ${statusPillClass}" style="margin-left:0.5rem">${sub.status === 'trial' ? '14-Day Free Trial' : escHtml(sub.status)}</span>
+          <span class="pill ${statusPillClass}" style="margin-left:0.5rem">${sub.status === 'trial' ? '7-Day Free Trial' : escHtml(sub.status)}</span>
           ${sub.days_remaining != null ? `<span class="t-caption" style="margin-left:0.5rem">${sub.days_remaining}d left${sub.status === 'trial' ? ' — switching plans keeps your free trial' : ''}</span>` : ''}
         </div>
         <div style="display:flex;gap:0.45rem;align-items:center">
@@ -4110,7 +4110,7 @@ async function switchPlan(tier, skipTrial = false) {
     const res = await apiPost('/billing/checkout', { plan_tier: tier, billing_cycle: cycle, skip_trial: !!skipTrial });
     if (res.checkout_mode === 'trial_plan_updated') {
       state.tenant.plan_tier = tier;
-      toast(`Selected ${tier.toUpperCase()} (${cycle}) — your 14-day free trial is preserved!`);
+      toast(`Selected ${tier.toUpperCase()} (${cycle}) — your 7-day free trial is preserved!`);
       await refreshAfterPlanChange();
       return;
     }
