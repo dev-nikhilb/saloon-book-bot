@@ -625,10 +625,12 @@ section { padding: 80px 0; }
 .pricing-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; }
 @media (max-width: 860px) { .pricing-grid { grid-template-columns: 1fr; } }
 .plan-card {
-  background: var(--surface); border: 0.5px solid var(--hairline); border-radius: var(--radius-xl);
+  background: var(--surface); border: 1px solid var(--hairline); border-radius: var(--radius-xl);
   padding: 28px; box-shadow: var(--shadow-card); display: flex; flex-direction: column; gap: 20px; position: relative;
+  cursor: pointer; transition: border-color 180ms ease, box-shadow 200ms ease, transform 160ms cubic-bezier(0.22, 1, 0.36, 1);
 }
-.plan-card.featured { border: 1.5px solid var(--blue); box-shadow: 0 12px 36px rgba(0, 122, 255, 0.14); }
+.plan-card:hover { transform: translateY(-2px); border-color: var(--separator); }
+.plan-card.featured { border: 1.8px solid var(--blue); box-shadow: 0 12px 36px rgba(0, 122, 255, 0.16); }
 .plan-tag { position: absolute; top: 20px; right: 20px; padding: 4px 10px; border-radius: 999px; background: var(--blue-soft); color: var(--blue); font-size: 0.72rem; font-weight: 700; }
 .plan-name { font-size: 1.15rem; font-weight: 700; letter-spacing: -0.02em; }
 .plan-price { display: flex; align-items: baseline; gap: 4px; margin-top: 6px; }
@@ -2370,11 +2372,19 @@ function renderPlansUI() {
         ? `${fmtInr(p.price_annual_inr)} billed annually &middot; Save ${fmtInr(save)}`
         : `Billed monthly &middot; ${PLAN_SUBTITLES[p.tier] || ''}`;
       const isPop = p.tier === 'growth';
+      const isSelected = p.tier === selectedPlanTier;
+      const badgeHtml = isSelected && isPop
+        ? '<span class="plan-tag">Most Popular · Selected</span>'
+        : isSelected
+          ? '<span class="plan-tag">✓ Selected</span>'
+          : isPop
+            ? '<span class="plan-tag" style="background:var(--surface-secondary);color:var(--label-secondary)">Most Popular</span>'
+            : '';
       return `
-        <div class="plan-card ${isPop ? 'featured' : ''}">
-          ${isPop ? '<span class="plan-tag">Most Popular</span>' : ''}
+        <div class="plan-card ${isSelected ? 'featured' : ''}" role="button" tabindex="0" aria-pressed="${isSelected ? 'true' : 'false'}" onclick="pickSignupPlan('${p.tier}', false)" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();pickSignupPlan('${p.tier}', false);}">
+          ${badgeHtml}
           <div>
-            <div class="plan-name">${esc(p.name)}</div>
+            <div class="plan-name" style="color:${isSelected ? 'var(--blue)' : 'var(--label)'}">${esc(p.name)}</div>
             <div class="plan-price">
               <span class="amt t-num">${fmtInr(monthlyEq)}</span>
               <span class="per">/month</span>
@@ -2384,7 +2394,7 @@ function renderPlansUI() {
           <ul class="plan-list">
             ${(p.features || []).map((ft) => `<li><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>${esc(ft)}</li>`).join('')}
           </ul>
-          <button type="button" class="btn ${isPop ? 'btn-primary' : 'btn-secondary'}" style="width:100%" onclick="pickSignupPlan('${p.tier}', true)">
+          <button type="button" class="btn ${isSelected ? 'btn-primary' : 'btn-secondary'}" style="width:100%" onclick="event.stopPropagation();pickSignupPlan('${p.tier}', true)">
             Start 14-Day Trial on ${esc(p.name)}
           </button>
         </div>`;
