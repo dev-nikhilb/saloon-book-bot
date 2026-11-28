@@ -2812,9 +2812,10 @@ async function openServiceForm(editId = null, isCategory = false, parentId = nul
 
   const parents = state.services.filter(s => !s.parent_service_id && s.id !== editId);
   const defaultInc = state.tenantSettings?.slot_increment_minutes || 15;
-  openModal(editId ? 'Edit Item' : (isCategory ? 'New Category' : `New ${getLabels().service}`), `
+  const svcLabel = getLabels().service;
+  openModal(editId ? 'Edit Item' : (isCategory ? 'New Category' : `New ${svcLabel}`), `
     <form id="svc-form" style="display:flex;flex-direction:column;gap:0.9rem">
-      <div><label class="field-label">Name *</label><input name="name" class="input" required value="${escHtml(svc?.name || '')}" placeholder="e.g. Haircut, Beard Trim"></div>
+      <div><label class="field-label">Name *</label><input name="name" class="input" required value="${escHtml(svc?.name || '')}" placeholder="${isCategory ? 'Category name' : `${escHtml(svcLabel)} name`}"></div>
       <div><label class="field-label">Description</label><textarea name="description" class="textarea" rows="2">${escHtml(svc?.description || '')}</textarea></div>
       ${!isCategory ? `
         <div>
@@ -3002,7 +3003,7 @@ async function openStaffForm(editId = null) {
         <div><label class="field-label">Full Name *</label><input name="name" class="input" required value="${escHtml(s?.name || '')}"></div>
         <div><label class="field-label">Role</label><input name="role" class="input" placeholder="e.g. Senior ${escHtml(L.staff)}" value="${escHtml(s?.role || '')}"></div>
       </div>
-      <div><label class="field-label">Specialty</label><input name="specialty" class="input" value="${escHtml(s?.specialty || '')}" placeholder="e.g. Pediatrics, Hair Color, Yoga"></div>
+      <div><label class="field-label">Specialty</label><input name="specialty" class="input" value="${escHtml(s?.specialty || '')}" placeholder="Area of expertise or specialty (optional)"></div>
       <div><label class="field-label">Short Bio</label><textarea name="bio" class="textarea" rows="2">${escHtml(s?.bio || '')}</textarea></div>
       ${bookable.length ? `
         <div>
@@ -3472,7 +3473,7 @@ async function renderSettings() {
             </div>
             <div>
               <label class="field-label">Welcome Greeting (when customer texts "Hi")</label>
-              <input name="welcome_message" class="input" placeholder="e.g. Welcome to Glow Studio! Tap below to book." value="${escHtml(s.welcome_message || '')}">
+              <input name="welcome_message" class="input" placeholder="Welcome to ${escHtml(t.business_name || 'our business')}! Tap below to book." value="${escHtml(s.welcome_message || '')}">
             </div>
             <div>
               <label class="field-label">Booking Confirmation Note (shown on every confirmed appointment)</label>
@@ -3561,7 +3562,7 @@ async function renderSettings() {
           <div class="grid-3">
             <div><label class="field-label">WABA Phone Number ID *</label><input name="waba_phone_number_id" class="input t-mono" value="${escHtml(t.waba_phone_number_id || '')}" placeholder="1425931860614514"></div>
             <div><label class="field-label">WhatsApp Business Account ID (Auto-Subscribes)</label><input name="waba_business_account_id" class="input t-mono" value="${escHtml(t.waba_business_account_id || '')}" placeholder="2443474279761159"></div>
-            <div><label class="field-label">Access Token (Fernet Encrypted)</label><input name="waba_access_token" type="password" class="input t-mono" placeholder="${t.waba_phone_number_id ? '••••••••••••' : 'Paste Meta token'}"></div>
+            <div><label class="field-label">Access Token (Stored Securely)</label><input name="waba_access_token" type="password" class="input t-mono" placeholder="${t.waba_phone_number_id ? '••••••••••••' : 'Paste Meta token'}"></div>
           </div>
           <div><button type="button" class="btn btn-primary btn-sm" onclick="saveWhatsApp()">Save WhatsApp Credentials</button></div>
         </form>
@@ -3955,7 +3956,7 @@ function goToBillingSection() {
 function openAddBranchModal() {
   openModal('Add Location / Branch', `
     <form id="branch-form" style="display:flex;flex-direction:column;gap:0.85rem">
-      <div><label class="field-label">Branch Name *</label><input name="name" class="input" required placeholder="e.g. Indiranagar Clinic"></div>
+      <div><label class="field-label">Branch Name *</label><input name="name" class="input" required placeholder="Branch or location name"></div>
       <div><label class="field-label">Address</label><input name="address" class="input" placeholder="Street address"></div>
     </form>
   `, `
