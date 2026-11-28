@@ -3645,10 +3645,113 @@ async function renderSettings() {
         </div>
         <div id="billing-box" class="t-caption">Loading plan details…</div>
       </div>
+
+      <!-- Danger Zone: Secure OTP-Verified Business Deletion -->
+      <div class="card" style="border:1px solid rgba(255,59,48,0.28);background:linear-gradient(135deg, var(--red-soft), var(--surface) 60%)">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.85rem">
+          <div>
+            <h3 class="t-heading" style="margin:0;color:var(--red-text)">Delete Business &amp; All Data</h3>
+            <p class="t-caption" style="margin:0.3rem 0 0;max-width:540px">
+              Permanently erase this workspace, all appointments, clients, services, team members, and stored WhatsApp credentials. Protected by 6-digit security code verification.
+            </p>
+          </div>
+          <button type="button" class="btn btn-soft-red btn-sm" onclick="openDeleteBusinessModal()">Delete Business…</button>
+        </div>
+      </div>
     </div>`;
 
   loadBillingBox();
   loadWaSetupInfo();
+}
+
+function openDeleteBusinessModal() {
+  const t = state.tenant || {};
+  const slug = t.slug || '';
+  const bizName = t.business_name || 'this business';
+  openModal('Delete Business Permanently', `
+    <div style="display:flex;flex-direction:column;gap:0.95rem">
+      <div style="padding:0.85rem 1rem;border-radius:12px;background:var(--red-soft);color:var(--red-text);font-size:0.84rem;line-height:1.5">
+        <strong>This action cannot be undone.</strong> Deleting <strong>${escHtml(bizName)}</strong> will permanently erase:
+        <ul style="margin:0.45rem 0 0 1.1rem;padding:0">
+          <li>All appointments, payment records, and client history</li>
+          <li>All services, categories, team members, and branches</li>
+          <li>Encrypted WhatsApp credentials &amp; your <code>/book/${escHtml(slug)}</code> link</li>
+        </ul>
+      </div>
+
+      <div id="del-step-1">
+        <p class="t-caption" style="margin:0 0 0.7rem">For your security, we&rsquo;ll send a fresh 6-digit verification code to your registered email/WhatsApp before allowing deletion.</p>
+        <button type="button" id="btn-del-otp" class="btn btn-danger" style="width:100%" onclick="requestDeleteBusinessOtp()">Send 6-Digit Security Code</button>
+      </div>
+
+      <div id="del-step-2" class="hidden" style="display:flex;flex-direction:column;gap:0.8rem">
+        <div id="del-otp-hint" class="t-caption" style="color:var(--blue);font-weight:600"></div>
+        <div>
+          <label class="field-label">1. Type <code class="t-mono">${escHtml(slug)}</code> to confirm *</label>
+          <input id="del-confirm-text" class="input t-mono" placeholder="${escHtml(slug)}" autocomplete="off">
+        </div>
+        <div>
+          <label class="field-label">2. Enter 6-Digit Security Code *</label>
+          <input id="del-otp-input" class="input t-mono" type="text" inputmode="numeric" maxlength="6" placeholder="123456" style="text-align:center;font-size:1.15rem;letter-spacing:0.26em">
+        </div>
+        <div id="del-err" class="hidden" style="padding:0.6rem 0.8rem;border-radius:10px;background:var(--red-soft);color:var(--red-text);font-size:0.8rem"></div>
+      </div>
+    </div>
+  `, `
+    <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+    <button type="button" id="btn-del-confirm" class="btn btn-danger hidden" onclick="confirmDeleteBusiness()">Permanently Delete Business</button>
+  `);
+}
+
+async function requestDeleteBusinessOtp() {
+  const btn = document.getElementById('btn-del-otp');
+  if (btn) { btn.disabled = true; btn.textContent = 'Sending security code…'; }
+  try {
+    const res = await apiPost('/tenant/delete/request-otp', {});
+    document.getElementById('del-step-1')?.classList.add('hidden');
+    const step2 = document.getElementById('del-step-2');
+    if (step2) { step2.classList.remove('hidden'); step2.style.display = 'flex'; }
+    document.getElementById('btn-del-confirm')?.classList.remove('hidden');
+    const hint = document.getElementById('del-otp-hint');
+    if (res.dev_otp) {
+      const inp = document.getElementById('del-otp-input');
+      if (inp) inp.value = res.dev_otp;
+      if (hint) hint.textContent = `Dev mode security code pre-filled: ${res.dev_otp}`;
+    } else {
+      if (hint) hint.textContent = `6-digit security code sent to ${res.destination_hint || 'your owner email/WhatsApp'}. Valid for 5 minutes.`;
+    }
+    document.getElementById('del-confirm-text')?.focus();
+  } catch (e) {
+    if (btn) { btn.disabled = false; btn.textContent = 'Send 6-Digit Security Code'; }
+  }
+}
+
+async function confirmDeleteBusiness() {
+  const confirmText = (document.getElementById('del-confirm-text')?.value || '').trim();
+  const otp = (document.getElementById('del-otp-input')?.value || '').trim();
+  const errEl = document.getElementById('del-err');
+  const btn = document.getElementById('btn-del-confirm');
+  if (errEl) errEl.classList.add('hidden');
+
+  if (!confirmText) {
+    if (errEl) { errEl.textContent = 'Please type your booking link slug to confirm.'; errEl.classList.remove('hidden'); }
+    return;
+  }
+  if (!/^\d{6}$/.test(otp)) {
+    if (errEl) { errEl.textContent = 'Please enter the 6-digit security code.'; errEl.classList.remove('hidden'); }
+    return;
+  }
+  if (btn) { btn.disabled = true; btn.textContent = 'Deleting permanently…'; }
+  try {
+    await apiPost('/tenant/delete', { confirm_text: confirmText, otp });
+    closeModal();
+    toast('Business permanently deleted');
+    logout();
+    setTimeout(() => { window.location.href = '/'; }, 800);
+  } catch (e) {
+    if (errEl) { errEl.textContent = e.message || 'Could not delete business'; errEl.classList.remove('hidden'); }
+    if (btn) { btn.disabled = false; btn.textContent = 'Permanently Delete Business'; }
+  }
 }
 
 async function loadWaSetupInfo() {

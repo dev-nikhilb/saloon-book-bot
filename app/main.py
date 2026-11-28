@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.config import settings
-from app.middleware import RequestIDMiddleware
+from app.middleware import RequestIDMiddleware, SecurityHeadersMiddleware
 
 LOG_LEVELS = {"DEBUG": 10, "INFO": 20, "WARNING": 30, "ERROR": 40, "CRITICAL": 50}
 
@@ -29,12 +29,18 @@ structlog.configure(
 
 logger = structlog.get_logger()
 
+_is_prod = settings.environment == "production"
+
 app = FastAPI(
-    title="Booking SaaS",
-    description="WhatsApp-first appointment booking for Indian service businesses",
-    version="0.1.0",
+    title="Tivoria",
+    description="WhatsApp-first appointment booking OS for service businesses",
+    version="1.0.0",
+    docs_url=None if _is_prod else "/docs",
+    redoc_url=None if _is_prod else "/redoc",
+    openapi_url=None if _is_prod else "/openapi.json",
 )
 
+app.add_middleware(SecurityHeadersMiddleware)
 app.add_middleware(RequestIDMiddleware)
 
 from app.subdomain import SubdomainMiddleware
@@ -43,12 +49,25 @@ app.add_middleware(SubdomainMiddleware)
 
 from fastapi.middleware.cors import CORSMiddleware
 
+_allowed_origins = [
+    "https://tivoria.site",
+    "https://www.tivoria.site",
+    "https://saloon-book-bot.vercel.app",
+]
+if not _is_prod:
+    _allowed_origins.extend([
+        "http://localhost:8000",
+        "http://127.0.0.1:8000",
+        "http://localhost:3000",
+    ])
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_allowed_origins,
+    allow_origin_regex=r"^https://([a-z0-9-]+\.)?tivoria\.site$",
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
 )
 
 from app.rate_limit import RateLimitMiddleware
@@ -114,5 +133,12 @@ if _site_dir.exists():
     @app.get("/terms")
     async def terms_page():
         return FileResponse(str(_site_dir / "terms.html"))
+
+    if _is_prod:
+        from fastapi import HTTPException
+
+        @app.get("/admin.html")
+        async def block_admin_in_prod():
+            raise HTTPException(status_code=404, detail="Not found")
 
     app.mount("/", StaticFiles(directory=str(_site_dir), html=True), name="site")

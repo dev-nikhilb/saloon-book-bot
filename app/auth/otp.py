@@ -63,18 +63,37 @@ async def _send_email_otp(
     to_email: str, code: str, business_name: str = "Tivoria", purpose: str = "login"
 ) -> tuple[str | None, str | None]:
     """Send 6-digit OTP via Resend API or SMTP. Returns (channel_or_none, error_message_or_none)."""
-    subject = f"{code} is your Tivoria {'verification' if purpose == 'signup' else 'login'} code"
+    if purpose == "delete_account":
+        subject = f"⚠️ {code} — Confirm permanent deletion of {business_name}"
+        heading = "Confirm Business Deletion"
+        accent = "#FF3B30"
+        lead = (
+            f"You requested to <strong>permanently delete {business_name}</strong> and all associated data on Tivoria. "
+            f"Enter this 6-digit security code only if you are sure:"
+        )
+        plain_body = (
+            f"WARNING: Your Tivoria security code to permanently delete {business_name} is {code}. "
+            f"Valid for 5 minutes. If you did not request this, ignore this email."
+        )
+    else:
+        subject = f"{code} is your Tivoria {'verification' if purpose == 'signup' else 'login'} code"
+        heading = "Tivoria Verification Code"
+        accent = "#007AFF"
+        lead = (
+            f"Use this 6-digit code to "
+            f"{'verify your new workspace' if purpose == 'signup' else f'sign in to {business_name}'}:"
+        )
+        plain_body = f"Your Tivoria code is {code}. Valid for 5 minutes."
+
     html_body = (
         f"<div style='font-family:-apple-system,BlinkMacSystemFont,sans-serif;max-width:460px;margin:0 auto;padding:24px'>"
-        f"<h2 style='margin:0 0 8px;color:#1D1D1F'>Tivoria Verification Code</h2>"
-        f"<p style='color:#6E6E73;margin:0 0 20px'>Use this 6-digit code to "
-        f"{'verify your new workspace' if purpose == 'signup' else f'sign in to {business_name}'}:</p>"
+        f"<h2 style='margin:0 0 8px;color:#1D1D1F'>{heading}</h2>"
+        f"<p style='color:#6E6E73;margin:0 0 20px'>{lead}</p>"
         f"<div style='font-size:32px;font-weight:700;letter-spacing:6px;padding:16px 24px;"
-        f"background:#F5F5F7;border-radius:14px;text-align:center;color:#007AFF'>{code}</div>"
+        f"background:#F5F5F7;border-radius:14px;text-align:center;color:{accent}'>{code}</div>"
         f"<p style='color:#86868B;font-size:13px;margin:20px 0 0'>Expires in 5 minutes. If you didn&rsquo;t request this, ignore this email.</p>"
         f"</div>"
     )
-    plain_body = f"Your Tivoria code is {code}. Valid for 5 minutes."
     last_error: str | None = None
 
     # 1. Resend HTTP API (3,000 emails/mo free)
@@ -277,6 +296,66 @@ async def request_otp(db: AsyncSession, identifier: str) -> dict:
         "delivered_via": delivered_via,
         "email_configured": is_email_otp_configured(),
         "delivery_error": delivery_error,
+    }
+    if settings.environment == "development":
+        resp["dev_otp"] = code
+    return resp
+
+
+async def request_delete_account_otp(db: AsyncSession, tenant_id: uuid.UUID) -> dict:
+    """Generate and deliver a high-privilege 6-digit OTP bound strictly to deleting this tenant."""
+    row = (
+        await db.execute(
+            text(
+                "SELECT id, business_name, owner_phone, owner_email, waba_phone_number_id, is_active "
+                "FROM tenants WHERE id = :tid LIMIT 1"
+            ),
+            {"tid": tenant_id},
+        )
+    ).first()
+    if not row or not row.is_active:
+        return {"found": False}
+
+    ident = f"tenant:{row.id}"
+    code = generate_otp()
+    await _store_otp(db, ident, code, purpose="delete_account")
+
+    delivered_via = "log"
+    delivery_error: str | None = None
+    if row.owner_email and is_email_otp_configured():
+        email_chan, delivery_error = await _send_email_otp(
+            row.owner_email, code, business_name=row.business_name, purpose="delete_account"
+        )
+        if email_chan:
+            delivered_via = email_chan
+
+    if row.waba_phone_number_id and row.owner_phone:
+        try:
+            from app.messaging.whatsapp.client import send_text_message
+
+            sent = await send_text_message(
+                phone_number_id=row.waba_phone_number_id,
+                to=row.owner_phone.lstrip("+"),
+                text=(
+                    f"⚠️ *Security Code to Permanently Delete {row.business_name}:* *{code}*\n"
+                    f"Valid for 5 minutes. Do NOT share this code with anyone."
+                ),
+                tenant_id=str(row.id),
+            )
+            if sent and delivered_via == "log":
+                delivered_via = "whatsapp"
+        except Exception as exc:
+            logger.warning("delete_otp_whatsapp_send_failed", error=str(exc))
+
+    logger.warning("auth.delete_account_otp_requested", tenant_id=str(row.id), delivered_via=delivered_via)
+
+    resp: dict = {
+        "found": True,
+        "sent": delivered_via != "log" or settings.environment == "development",
+        "expires_in": OTP_TTL_SECONDS,
+        "delivered_via": delivered_via,
+        "delivery_error": delivery_error,
+        "destination_hint": row.owner_email or row.owner_phone,
     }
     if settings.environment == "development":
         resp["dev_otp"] = code

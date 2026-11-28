@@ -3,6 +3,7 @@
 GET  /webhooks/whatsapp — Meta verification handshake
 POST /webhooks/whatsapp — Inbound messages + status updates
 """
+import hmac
 import json
 
 import structlog
@@ -24,7 +25,9 @@ async def verify_webhook(
     hub_challenge: str = Query(alias="hub.challenge", default=""),
 ):
     """Meta webhook verification handshake."""
-    if hub_mode == "subscribe" and hub_verify_token == settings.meta_webhook_verify_token:
+    if hub_mode == "subscribe" and hub_verify_token and hmac.compare_digest(
+        hub_verify_token, settings.meta_webhook_verify_token
+    ):
         logger.info("webhook_verified")
         return Response(content=hub_challenge, media_type="text/plain")
 

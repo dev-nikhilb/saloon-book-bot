@@ -323,3 +323,68 @@ class TestCheckSlugEndpoint:
         r_short = client.get("/api/auth/check-slug?slug=a")
         assert r_short.status_code == 200
         assert r_short.json()["available"] is False
+
+
+class TestSecurityAndBusinessDeletion:
+    def test_security_headers_and_url_xss_guard(self, client):
+        resp = client.get("/health")
+        assert resp.status_code == 200
+        assert resp.headers.get("x-content-type-options") == "nosniff"
+        assert resp.headers.get("x-frame-options") == "DENY"
+        assert "frame-ancestors 'none'" in (resp.headers.get("content-security-policy") or "")
+        assert resp.headers.get("referrer-policy") == "strict-origin-when-cross-origin"
+
+        biz = signup(client, "clinic", "Safe Care Clinic")
+        bad_url = client.put(
+            "/api/tenant/settings",
+            headers=biz["headers"],
+            json={"google_maps_url": "javascript:alert(1)"},
+        )
+        assert bad_url.status_code == 400
+
+    def test_otp_verified_business_deletion_and_jwt_revocation(self, client):
+        biz = signup(client, "salon", "Temp Delete Studio")
+        headers = biz["headers"]
+        slug = biz["slug"]
+
+        # Seed some data (template services + staff) to confirm FK-safe cascade delete
+        tpl = client.post("/api/onboarding/apply-template", headers=headers, json={"business_type": "salon"})
+        assert tpl.status_code in (200, 201)
+
+        # Step 1: Request dedicated delete_account OTP
+        otp_resp = client.post("/api/tenant/delete/request-otp", headers=headers)
+        assert otp_resp.status_code == 200
+        code = otp_resp.json()["dev_otp"]
+        assert len(code) == 6
+
+        # Wrong confirmation phrase must be rejected
+        r_bad_phrase = client.post(
+            "/api/tenant/delete",
+            headers=headers,
+            json={"otp": code, "confirm_text": "wrong-slug"},
+        )
+        assert r_bad_phrase.status_code == 400
+
+        # Wrong OTP must be rejected
+        r_bad_otp = client.post(
+            "/api/tenant/delete",
+            headers=headers,
+            json={"otp": "000000" if code != "000000" else "999999", "confirm_text": slug},
+        )
+        assert r_bad_otp.status_code == 401
+
+        # Valid OTP + exact slug -> permanently deletes workspace
+        r_ok = client.post(
+            "/api/tenant/delete",
+            headers=headers,
+            json={"otp": code, "confirm_text": slug},
+        )
+        assert r_ok.status_code == 200
+        assert r_ok.json()["deleted"] is True
+
+        # Old JWT is immediately revoked (401)
+        assert client.get("/api/tenant", headers=headers).status_code == 401
+
+        # Public page returns 404 and slug is freed again
+        assert client.get(f"/api/public/business/{slug}").status_code == 404
+        assert client.get(f"/api/auth/check-slug?slug={slug}").json()["available"] is True

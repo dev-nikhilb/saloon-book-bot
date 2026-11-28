@@ -7,12 +7,18 @@ import structlog
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
+from sqlalchemy import text
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import settings
+from app.database import get_db
 
 log = structlog.get_logger()
 
-JWT_SECRET = settings.jwt_secret or settings.encryption_key or "dev-dashboard-jwt-secret-change-in-prod"
+_raw_secret = settings.jwt_secret or settings.encryption_key
+if not _raw_secret and settings.environment == "production":
+    raise RuntimeError("JWT_SECRET or ENCRYPTION_KEY must be set in production")
+JWT_SECRET = _raw_secret or "dev-dashboard-jwt-secret-change-in-prod"
 JWT_ALGORITHM = "HS256"
 JWT_EXPIRY_HOURS = 24
 
@@ -46,11 +52,11 @@ def decode_access_token(token: str) -> dict:
 
 async def get_current_tenant(
     credentials: HTTPAuthorizationCredentials = Depends(_bearer_scheme),
+    db: AsyncSession = Depends(get_db),
 ) -> uuid.UUID:
-    """FastAPI dependency that extracts and validates tenant_id from the JWT.
-
-    Returns the tenant_id as a UUID.  Raises 401 if the token is missing,
-    invalid, or expired.
+    """FastAPI dependency that extracts and validates tenant_id from the JWT
+    and confirms the business still exists and is active (immediately invalidating
+    tokens belonging to deleted or deactivated workspaces).
     """
     payload = decode_access_token(credentials.credentials)
     tenant_id_str = payload.get("sub")
@@ -60,9 +66,23 @@ async def get_current_tenant(
             detail="Token missing tenant identifier",
         )
     try:
-        return uuid.UUID(tenant_id_str)
+        tid = uuid.UUID(tenant_id_str)
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Malformed tenant identifier in token",
         ) from exc
+
+    row = (
+        await db.execute(
+            text("SELECT is_active FROM tenants WHERE id = :id LIMIT 1"),
+            {"id": tid},
+        )
+    ).first()
+    if not row or not row.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Workspace no longer exists or is deactivated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return tid

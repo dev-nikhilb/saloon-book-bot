@@ -580,6 +580,118 @@ async def update_tenant(
     return _row_to_dict(result.first())
 
 
+class DeleteTenantRequest(BaseModel):
+    otp: str = Field(..., min_length=6, max_length=6)
+    confirm_text: str = Field(..., min_length=2, max_length=120)
+
+
+@router.post("/tenant/delete/request-otp")
+async def request_delete_tenant_otp(
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Step-up security: send a fresh 6-digit OTP specifically bound to deleting this business."""
+    from app.auth.otp import request_delete_account_otp
+    from app.config import settings as app_settings
+
+    res = await request_delete_account_otp(db, tenant_id)
+    if not res.get("found"):
+        raise HTTPException(status_code=404, detail="Workspace not found")
+    if app_settings.environment == "production" and res.get("delivered_via") == "log":
+        raise HTTPException(
+            status_code=502,
+            detail=res.get("delivery_error")
+            or "Could not deliver verification code. Ensure your owner email is set in Business Profile.",
+        )
+    return {
+        "sent": True,
+        "expires_in": res["expires_in"],
+        "delivered_via": res["delivered_via"],
+        "destination_hint": res.get("destination_hint"),
+        **({"dev_otp": res["dev_otp"]} if "dev_otp" in res else {}),
+    }
+
+
+@router.post("/tenant/delete")
+async def delete_tenant_permanently(
+    body: DeleteTenantRequest,
+    tenant_id: uuid.UUID = Depends(get_current_tenant),
+    db: AsyncSession = Depends(get_db),
+):
+    """Permanently delete a business workspace and all associated data.
+
+    Layered security checks:
+      1. Valid active owner JWT (`get_current_tenant`)
+      2. Explicit confirmation phrase matching the business slug or name
+      3. Fresh single-use 6-digit OTP bound strictly to `purpose='delete_account'` for this tenant
+    """
+    from app.auth.otp import verify_otp
+
+    row = (
+        await db.execute(
+            text(
+                "SELECT id, business_name, slug, owner_phone, owner_email "
+                "FROM tenants WHERE id = :tid LIMIT 1"
+            ),
+            {"tid": tenant_id},
+        )
+    ).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Workspace not found")
+
+    typed = body.confirm_text.strip().lower()
+    valid_phrases = {row.slug.strip().lower(), row.business_name.strip().lower()}
+    if typed not in valid_phrases:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Confirmation text must exactly match your booking slug ({row.slug}) or business name.",
+        )
+
+    ok, err = await verify_otp(f"tenant:{row.id}", body.otp.strip(), db=db, purpose="delete_account")
+    if not ok:
+        raise HTTPException(status_code=401, detail=err)
+
+    # Permanently erase all tenant records in FK-safe order inside one atomic transaction
+    tid = row.id
+    await db.execute(
+        text("DELETE FROM reminder_log WHERE booking_id IN (SELECT id FROM bookings WHERE tenant_id = :tid)"),
+        {"tid": tid},
+    )
+    await db.execute(text("DELETE FROM reminder_rules WHERE tenant_id = :tid"), {"tid": tid})
+    await db.execute(text("DELETE FROM feedback WHERE tenant_id = :tid"), {"tid": tid})
+    await db.execute(text("DELETE FROM payments WHERE tenant_id = :tid"), {"tid": tid})
+    await db.execute(text("DELETE FROM messages WHERE tenant_id = :tid"), {"tid": tid})
+    await db.execute(
+        text("DELETE FROM conversation_states WHERE state_key LIKE :conv_prefix"),
+        {"conv_prefix": f"conv:{tid}:%"},
+    )
+    await db.execute(text("DELETE FROM bookings WHERE tenant_id = :tid"), {"tid": tid})
+    await db.execute(text("DELETE FROM customers WHERE tenant_id = :tid"), {"tid": tid})
+    await db.execute(text("UPDATE services SET parent_service_id = NULL WHERE tenant_id = :tid"), {"tid": tid})
+    await db.execute(text("DELETE FROM services WHERE tenant_id = :tid"), {"tid": tid})
+    await db.execute(text("DELETE FROM staff WHERE tenant_id = :tid"), {"tid": tid})
+    await db.execute(text("DELETE FROM branches WHERE tenant_id = :tid"), {"tid": tid})
+    await db.execute(text("DELETE FROM subscription_invoices WHERE tenant_id = :tid"), {"tid": tid})
+    await db.execute(text("DELETE FROM message_credit_ledger WHERE tenant_id = :tid"), {"tid": tid})
+    await db.execute(text("DELETE FROM subscriptions WHERE tenant_id = :tid"), {"tid": tid})
+    await db.execute(text("DELETE FROM tenant_settings WHERE tenant_id = :tid"), {"tid": tid})
+
+    otp_idents = [f"tenant:{tid}"]
+    if row.owner_phone:
+        otp_idents.append(row.owner_phone.lower().strip())
+    if row.owner_email:
+        otp_idents.append(row.owner_email.lower().strip())
+    await db.execute(
+        text("DELETE FROM auth_otps WHERE identifier = ANY(:idents)"),
+        {"idents": otp_idents},
+    )
+    await db.execute(text("DELETE FROM tenants WHERE id = :tid"), {"tid": tid})
+    await db.commit()
+
+    log.warning("tenant.permanently_deleted", tenant_id=str(tid), slug=row.slug)
+    return {"deleted": True, "message": f"{row.business_name} and all associated data have been permanently deleted."}
+
+
 class WhatsAppConfig(BaseModel):
     waba_phone_number_id: str
     waba_business_account_id: str | None = None
@@ -861,6 +973,13 @@ async def update_tenant_settings(
 
     if "deposit_mode" in updates and updates["deposit_mode"] not in ("auto", "razorpay", "upi_manual", "disabled"):
         raise HTTPException(status_code=400, detail="deposit_mode must be auto, razorpay, upi_manual, or disabled")
+
+    for url_field in ("google_maps_url", "google_review_url"):
+        if url_field in updates and updates[url_field]:
+            val = str(updates[url_field]).strip()
+            if not (val.startswith("https://") or val.startswith("http://")):
+                raise HTTPException(status_code=400, detail=f"{url_field} must start with https:// or http://")
+            updates[url_field] = val
 
     try:
         await require_active_subscription(db, tenant_id)
