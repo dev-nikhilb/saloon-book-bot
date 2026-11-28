@@ -663,6 +663,46 @@ section { padding: 80px 0; }
 .field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 @media (max-width: 520px) { .field-row { grid-template-columns: 1fr; } }
 .slug-hint { font-size: 0.74rem; color: var(--label-tertiary); margin-top: 5px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.slug-explain { font-size: 0.78rem; color: var(--label-secondary); margin: -2px 0 8px; line-height: 1.45; }
+.slug-input-wrap {
+  display: flex; align-items: stretch; border-radius: 12px; overflow: hidden;
+  border: 0.5px solid var(--separator); background: var(--surface-secondary);
+  transition: border-color 160ms ease, box-shadow 160ms ease, background-color 160ms ease;
+}
+.slug-input-wrap:focus-within { border-color: var(--blue); background: var(--surface); box-shadow: 0 0 0 3px var(--blue-soft); }
+.slug-input-wrap.ok { border-color: rgba(40, 205, 65, 0.55); }
+.slug-input-wrap.err { border-color: rgba(255, 59, 48, 0.55); }
+.slug-prefix {
+  display: inline-flex; align-items: center; padding: 0 11px 0 13px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.8rem;
+  color: var(--label-tertiary); background: rgba(120, 120, 128, 0.08);
+  border-right: 0.5px solid var(--hairline); white-space: nowrap; flex-shrink: 0;
+}
+.slug-input-wrap input {
+  border: none !important; background: transparent !important; box-shadow: none !important;
+  border-radius: 0 !important; flex: 1; min-width: 0; padding: 11px 12px;
+}
+.slug-status {
+  display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px;
+  margin-top: 7px; font-size: 0.77rem; font-weight: 600; min-height: 22px;
+}
+.slug-status.checking { color: var(--label-secondary); }
+.slug-status.ok { color: var(--green-text); }
+.slug-status.err { color: var(--red); }
+.slug-suggestions { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 7px; }
+.slug-chip {
+  border: 0.5px solid rgba(0, 122, 255, 0.3); background: var(--blue-soft); color: var(--blue);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.74rem; font-weight: 600;
+  padding: 4px 10px; border-radius: 999px; cursor: pointer; transition: transform 90ms ease;
+}
+.slug-chip:active { transform: scale(0.95); }
+.slug-gen-btn {
+  border: 0.5px solid rgba(0, 122, 255, 0.35); background: var(--surface); color: var(--blue);
+  font-size: 0.75rem; font-weight: 600; padding: 4px 11px; border-radius: 999px; cursor: pointer;
+  transition: background-color 140ms ease, transform 90ms ease;
+}
+.slug-gen-btn:hover { background: var(--blue-soft); }
+.slug-gen-btn:active { transform: scale(0.96); }
 .form-msg { font-size: 0.84rem; padding: 11px 14px; border-radius: 12px; display: none; line-height: 1.45; }
 .form-msg.show { display: block; }
 .form-msg.err { background: rgba(255, 59, 48, 0.12); color: var(--red); }
@@ -1459,9 +1499,16 @@ html, body { overflow-x: clip; }
               </div>
             </div>
             <div class="field">
-              <label for="sSlug">Your Public Booking Link *</label>
-              <input id="sSlug" required minlength="2" maxlength="30" pattern="[a-z0-9][a-z0-9-]*[a-z0-9]" placeholder="careplus-clinic">
-              <div class="slug-hint" id="slugPreview">tivoria.site/book/your-business</div>
+              <label for="sSlug">Your Unique Booking Page Link *</label>
+              <div class="slug-explain">A curated booking web page created just for your business&mdash;share it on Instagram bio, WhatsApp, or Google Maps so clients can book anytime.</div>
+              <div class="slug-input-wrap" id="slugInputWrap">
+                <span class="slug-prefix" id="slugPrefix">tivoria.site/book/</span>
+                <input id="sSlug" required minlength="2" maxlength="30" pattern="[a-z0-9][a-z0-9-]*[a-z0-9]" placeholder="careplus-clinic" autocomplete="off">
+              </div>
+              <div class="slug-status" id="slugStatus">
+                <span id="slugPreview">Auto-created as you type your business name</span>
+              </div>
+              <div class="slug-suggestions" id="slugSuggestions" style="display:none"></div>
             </div>
             <div class="wiz-foot">
               <span style="font-size:0.8rem;color:var(--label-secondary)">Already registered? <a href="/dashboard/" style="color:var(--blue);font-weight:600">Sign in &rarr;</a></span>
@@ -2474,7 +2521,8 @@ function validateSignupStep(step) {
     const slug = slugify(document.getElementById('sSlug')?.value || biz);
     if (biz.length < 2) { showSignupError('Please enter your Business Name (at least 2 characters).'); document.getElementById('sName')?.focus(); return false; }
     if (own.length < 2) { showSignupError('Please enter your name.'); document.getElementById('sOwner')?.focus(); return false; }
-    if (slug.length < 2) { showSignupError('Please enter a valid Public Booking Link (letters/numbers only).'); document.getElementById('sSlug')?.focus(); return false; }
+    if (slug.length < 2) { showSignupError('Please enter a valid booking link (at least 2 letters or numbers).'); document.getElementById('sSlug')?.focus(); return false; }
+    if (slugAvailability === false) { showSignupError('That booking link is already taken. Tap "Generate unique link" or pick a suggestion below.'); document.getElementById('sSlug')?.focus(); return false; }
   }
   if (step === 2) {
     const phone = (document.getElementById('sPhone')?.value || '').replace(/[\s\-()]/g, '');
@@ -2600,8 +2648,13 @@ async function fetchLivePlans() {
   } catch (e) {}
 }
 
-/* ── Live Slug Auto-Generator & Self-Serve Signup (+ Automatic Email OTP) ── */
+/* ── Live Slug Auto-Generator, Availability Check & Self-Serve Signup ── */
 let slugEditedManually = false;
+let slugAvailability = null; // null = unchecked, true = available, false = taken
+let slugCheckTimer = null;
+let slugCheckSeq = 0;
+let lastSlugSuggestions = [];
+
 function slugify(str) {
   return str.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 30);
 }
@@ -2614,19 +2667,113 @@ function normalizePhone(raw) {
 
 const sNameEl = document.getElementById('sName');
 const sSlugEl = document.getElementById('sSlug');
-const slugPrevEl = document.getElementById('slugPreview');
+const slugWrapEl = document.getElementById('slugInputWrap');
+const slugStatusEl = document.getElementById('slugStatus');
+const slugSugEl = document.getElementById('slugSuggestions');
+const slugPrefixEl = document.getElementById('slugPrefix');
+if (slugPrefixEl && window.location.host && !window.location.host.includes('localhost')) {
+  slugPrefixEl.textContent = `${window.location.host}/book/`;
+}
+
+function applySuggestedSlug(val) {
+  slugEditedManually = true;
+  sSlugEl.value = val;
+  scheduleSlugCheck(val, true);
+}
+
+async function generateUniqueSlug() {
+  const base = slugify(sSlugEl.value || sNameEl.value) || 'my-business';
+  if (lastSlugSuggestions.length) {
+    applySuggestedSlug(lastSlugSuggestions[0]);
+    return;
+  }
+  const suffix = Math.floor(10 + Math.random() * 89);
+  const candidate = `${base.slice(0, 26).replace(/-+$/, '')}-${suffix}`;
+  applySuggestedSlug(candidate);
+}
+
+function scheduleSlugCheck(rawVal, immediate = false) {
+  clearTimeout(slugCheckTimer);
+  const sl = slugify(rawVal);
+  slugAvailability = null;
+  if (slugWrapEl) slugWrapEl.classList.remove('ok', 'err');
+  if (slugSugEl) { slugSugEl.style.display = 'none'; slugSugEl.innerHTML = ''; }
+
+  if (!sl) {
+    if (slugStatusEl) {
+      slugStatusEl.className = 'slug-status';
+      slugStatusEl.innerHTML = '<span>Auto-created as you type your business name</span>';
+    }
+    return;
+  }
+  if (sl.length < 2) {
+    slugAvailability = false;
+    if (slugWrapEl) slugWrapEl.classList.add('err');
+    if (slugStatusEl) {
+      slugStatusEl.className = 'slug-status err';
+      slugStatusEl.innerHTML = '<span>Use at least 2 letters or numbers</span>';
+    }
+    return;
+  }
+
+  if (slugStatusEl) {
+    slugStatusEl.className = 'slug-status checking';
+    slugStatusEl.innerHTML = `<span>Checking <code>${esc(sl)}</code>…</span>`;
+  }
+
+  const seq = ++slugCheckSeq;
+  slugCheckTimer = setTimeout(async () => {
+    try {
+      const res = await fetch(`/api/auth/check-slug?slug=${encodeURIComponent(sl)}`);
+      if (seq !== slugCheckSeq) return;
+      const data = await res.json();
+      const host = slugPrefixEl ? slugPrefixEl.textContent : 'tivoria.site/book/';
+      if (data.available) {
+        slugAvailability = true;
+        lastSlugSuggestions = [];
+        if (slugWrapEl) { slugWrapEl.classList.remove('err'); slugWrapEl.classList.add('ok'); }
+        if (slugStatusEl) {
+          slugStatusEl.className = 'slug-status ok';
+          slugStatusEl.innerHTML = `<span>✓ Available — ${esc(host + data.slug)}</span>`;
+        }
+        if (slugSugEl) { slugSugEl.style.display = 'none'; slugSugEl.innerHTML = ''; }
+      } else {
+        slugAvailability = false;
+        lastSlugSuggestions = Array.isArray(data.suggestions) ? data.suggestions : [];
+        if (slugWrapEl) { slugWrapEl.classList.remove('ok'); slugWrapEl.classList.add('err'); }
+        if (slugStatusEl) {
+          slugStatusEl.className = 'slug-status err';
+          slugStatusEl.innerHTML = `
+            <span>✕ ${esc(data.reason || 'Already taken')}</span>
+            <button type="button" class="slug-gen-btn" onclick="generateUniqueSlug()">✨ Generate unique link</button>`;
+        }
+        if (slugSugEl && lastSlugSuggestions.length) {
+          slugSugEl.style.display = 'flex';
+          slugSugEl.innerHTML = `<span style="font-size:0.74rem;color:var(--label-secondary)">Try available:</span>` +
+            lastSlugSuggestions.map((sg) => `<button type="button" class="slug-chip" onclick="applySuggestedSlug('${esc(sg)}')">${esc(sg)}</button>`).join('');
+        }
+      }
+    } catch (e) {
+      if (seq !== slugCheckSeq) return;
+      slugAvailability = null;
+      if (slugStatusEl) {
+        slugStatusEl.className = 'slug-status';
+        slugStatusEl.innerHTML = `<span>Link preview: ${esc((slugPrefixEl?.textContent || 'tivoria.site/book/') + sl)}</span>`;
+      }
+    }
+  }, immediate ? 40 : 300);
+}
 
 sNameEl.addEventListener('input', () => {
   if (!slugEditedManually) {
     const sl = slugify(sNameEl.value);
     sSlugEl.value = sl;
-    slugPrevEl.textContent = `${window.location.host}/book/${sl || 'your-business'}`;
+    scheduleSlugCheck(sl);
   }
 });
 sSlugEl.addEventListener('input', () => {
   slugEditedManually = true;
-  const sl = slugify(sSlugEl.value);
-  slugPrevEl.textContent = `${window.location.host}/book/${sl || 'your-business'}`;
+  scheduleSlugCheck(sSlugEl.value);
 });
 
 document.getElementById('signupForm').addEventListener('submit', async (e) => {

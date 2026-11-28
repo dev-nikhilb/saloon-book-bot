@@ -299,3 +299,27 @@ class TestWhatsAppDepositFlow:
 
         assert "deposit required" in final["message"].lower()
         assert "500" in final["message"]
+
+
+class TestCheckSlugEndpoint:
+    def test_check_slug_availability_and_unique_suggestions(self, client):
+        biz = signup(client, "clinic", "Apex Care Clinic")
+        taken_slug = biz["slug"]
+
+        # Taken slug -> available=False with genuinely free suggestions
+        r_taken = client.get(f"/api/auth/check-slug?slug={taken_slug}")
+        assert r_taken.status_code == 200
+        d_taken = r_taken.json()
+        assert d_taken["available"] is False
+        assert len(d_taken["suggestions"]) >= 1
+
+        # Suggested slug must itself be available
+        sug = d_taken["suggestions"][0]
+        r_free = client.get(f"/api/auth/check-slug?slug={sug}")
+        assert r_free.status_code == 200
+        assert r_free.json()["available"] is True
+
+        # Too short slug -> available=False
+        r_short = client.get("/api/auth/check-slug?slug=a")
+        assert r_short.status_code == 200
+        assert r_short.json()["available"] is False

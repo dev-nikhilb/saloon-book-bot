@@ -311,6 +311,63 @@ async def request_signup_verification_otp(body: SignupOtpRequest, db: AsyncSessi
     return res
 
 
+@router.get("/auth/check-slug")
+async def check_slug_availability(
+    slug: str = Query(..., min_length=1, max_length=60),
+    db: AsyncSession = Depends(get_db),
+):
+    """Check whether a public booking link slug is available and suggest unique alternatives if taken."""
+    import random
+    import re
+
+    clean = re.sub(r"[^a-z0-9]+", "-", slug.strip().lower()).strip("-")[:30]
+    if len(clean) < 2:
+        return {
+            "slug": clean,
+            "available": False,
+            "reason": "Use at least 2 letters or numbers",
+            "suggestions": [],
+        }
+
+    existing = await db.execute(
+        text("SELECT 1 FROM tenants WHERE slug = :slug LIMIT 1"),
+        {"slug": clean},
+    )
+    if not existing.first():
+        return {"slug": clean, "available": True, "suggestions": []}
+
+    # Build clean candidate alternatives and verify which are genuinely free
+    base = clean[:24].rstrip("-") or "studio"
+    candidates = [
+        f"{base}-book",
+        f"{base}-in",
+        f"{base}-2",
+        f"{base}-{random.randint(10, 99)}",
+        f"{base}-{random.randint(100, 999)}",
+        f"{base}-{random.randint(1000, 9999)}",
+    ]
+    # Deduplicate preserving order & enforce <= 30 chars
+    uniq_candidates = []
+    for c in candidates:
+        c_trim = c[:30].rstrip("-")
+        if len(c_trim) >= 2 and c_trim != clean and c_trim not in uniq_candidates:
+            uniq_candidates.append(c_trim)
+
+    taken_rows = await db.execute(
+        text("SELECT slug FROM tenants WHERE slug = ANY(:cands)"),
+        {"cands": uniq_candidates},
+    )
+    taken = {r.slug for r in taken_rows.fetchall()}
+    suggestions = [c for c in uniq_candidates if c not in taken][:3]
+
+    return {
+        "slug": clean,
+        "available": False,
+        "reason": "This booking link is already taken",
+        "suggestions": suggestions,
+    }
+
+
 @router.post("/auth/signup", response_model=SignupResponse, status_code=201)
 async def signup(body: SignupRequest, db: AsyncSession = Depends(get_db)):
     """Self-service tenant registration. Creates tenant + branch + settings + owner staff + 14-day trial."""
