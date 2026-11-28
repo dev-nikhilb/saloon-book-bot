@@ -1585,7 +1585,7 @@ async function sendOtp() {
     } else if (data.delivered_via === 'whatsapp') {
       document.getElementById('otp-hint').textContent = 'Enter the 6-digit code sent to your WhatsApp';
     } else {
-      document.getElementById('otp-hint').textContent = 'Configure free Resend / Gmail SMTP env vars in Vercel to receive OTP emails.';
+      document.getElementById('otp-hint').textContent = 'Enter the 6-digit verification code sent to your email or WhatsApp.';
     }
     document.getElementById('login-otp').focus();
   } catch (e) {
@@ -3477,7 +3477,7 @@ async function renderSettings() {
         <div id="wa-embedded-box" class="hidden" style="padding:1rem;border-radius:14px;background:var(--green-soft);border:0.5px solid rgba(52,199,89,0.28);margin-bottom:1rem;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:0.75rem">
           <div>
             <div style="font-weight:700;font-size:0.9rem;color:var(--green-text)">⚡ 1-Click Official Meta Connect (Keep Using Your WhatsApp Business App!)</div>
-            <div class="t-caption" style="color:var(--label);margin-top:2px">Connect your existing WhatsApp Business number in 60 seconds — zero webhooks or tokens to copy.</div>
+            <div class="t-caption" style="color:var(--label);margin-top:2px">Connect your existing WhatsApp Business number in 60 seconds — no manual setup required.</div>
           </div>
           <button type="button" class="btn btn-primary btn-sm" onclick="launchMetaEmbeddedSignup()">${t.waba_phone_number_id ? 'Reconnect WhatsApp' : 'Connect WhatsApp in 60s'}</button>
         </div>
@@ -3581,7 +3581,7 @@ async function renderSettings() {
               </select>
             </div>
             <div>
-              <label class="field-label">Merchant UPI ID (VPA)</label>
+              <label class="field-label">Business UPI ID</label>
               <input name="upi_id" class="input t-mono" value="${escHtml(s.upi_id || '')}" placeholder="yourbusiness@okicici">
             </div>
             <div>
@@ -3589,7 +3589,7 @@ async function renderSettings() {
               <input name="deposit_hold_minutes" type="number" min="5" max="1440" class="input t-num" value="${s.deposit_hold_minutes || 15}">
             </div>
           </div>
-          <div class="t-caption">Razorpay Payment Links verify automatically via webhook. Direct UPI collects a 12-digit Unique Transaction Reference (UTR) from the customer on WhatsApp and lets you reply <code>confirm &lt;id&gt;</code> to approve in 1 tap.</div>
+          <div class="t-caption">Razorpay Payment Links verify automatically the moment a customer pays. Direct UPI collects a 12-digit Unique Transaction Reference (UTR) from the customer on WhatsApp and lets you approve in 1 tap.</div>
           <div>
             ${depositsEnabled
               ? `<button type="button" class="btn btn-primary btn-sm" onclick="saveDepositSettings()">Save Deposit Settings</button>`
@@ -3722,8 +3722,8 @@ async function launchMetaEmbeddedSignup() {
       state.tenant.waba_phone_number_id = res.waba_phone_number_id;
       state.tenant.waba_business_account_id = res.waba_business_account_id;
       toast(res.is_coexistence
-        ? '🎉 WhatsApp Business App connected in Coexistence mode!'
-        : '🎉 WhatsApp connected, registered & webhook auto-subscribed!');
+        ? '🎉 WhatsApp Business App connected — keep using your phone app normally!'
+        : '🎉 WhatsApp Business number connected and ready to take bookings!');
       renderSettings();
     }).catch(() => {});
   }, {
@@ -3853,7 +3853,7 @@ async function saveWhatsApp() {
     const res = await apiPut('/tenant/whatsapp', body);
     state.tenant.waba_phone_number_id = pid;
     if (wabaId) state.tenant.waba_business_account_id = wabaId;
-    toast(res.webhook_subscribed ? 'WhatsApp saved & WABA webhook auto-subscribed!' : 'WhatsApp credentials encrypted & saved');
+    toast(res.webhook_subscribed ? 'WhatsApp Business connected and ready to receive messages!' : 'WhatsApp settings saved securely');
     renderSettings();
   } catch (e) {}
 }
