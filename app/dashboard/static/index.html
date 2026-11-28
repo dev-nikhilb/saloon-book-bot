@@ -697,26 +697,41 @@ html[data-theme="dark"] .apple-toast { background: rgba(58, 58, 60, 0.92); }
   .bk-row-actions { grid-column: 1 / -1; justify-content: flex-end; padding-top: 0.25rem; }
 }
 
-/* Team Lanes View */
+/* Team Lanes View (Matches Landing Page Apple Dashboard Preview) */
 .bk-team-grid {
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(275px, 1fr));
   gap: 0.9rem; align-items: start;
 }
 .bk-lane {
-  background: var(--surface); border-radius: var(--radius-lg);
-  border: 0.5px solid var(--hairline); box-shadow: var(--shadow-card);
+  background: var(--surface-secondary); border-radius: 18px;
+  border: 0.5px solid var(--hairline);
   padding: 0.9rem; display: flex; flex-direction: column; gap: 0.65rem;
 }
 .bk-lane-head {
-  display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
-  padding-bottom: 0.6rem; border-bottom: 0.5px solid var(--hairline);
+  display: flex; align-items: center; justify-content: space-between; gap: 0.55rem;
+  padding: 0.1rem 0.15rem 0.65rem; border-bottom: 0.5px solid var(--hairline);
 }
+.bk-avatar-purple { background: var(--purple-soft); color: var(--purple); }
+.bk-avatar-green { background: var(--green-soft); color: var(--green-text); }
 .bk-lane-card {
-  background: var(--surface-secondary); border-radius: 13px;
-  padding: 0.75rem 0.85rem; border-left: 3.5px solid var(--blue);
-  cursor: pointer; transition: transform 130ms ease, background-color 130ms ease;
+  background: var(--surface); border-radius: 14px;
+  padding: 0.82rem 0.9rem; border: 0.5px solid var(--hairline);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03), 0 4px 12px rgba(0, 0, 0, 0.03);
+  display: flex; flex-direction: column; gap: 0.42rem;
+  cursor: pointer; transition: transform 160ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 160ms ease, border-color 160ms ease;
 }
-.bk-lane-card:hover { transform: translateY(-1px); }
+.bk-lane-card:hover { transform: translateY(-1px); box-shadow: 0 6px 18px rgba(0, 0, 0, 0.07); }
+.bk-lane-card.pending { border-color: rgba(255, 149, 0, 0.38); }
+.bk-card-row { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; }
+.bk-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; background: var(--blue); display: inline-block; }
+.bk-dot.completed { background: var(--green); }
+.bk-dot.pending_deposit { background: var(--orange); }
+.bk-dot.cancelled { background: var(--label-tertiary); }
+.bk-dot.no_show { background: var(--red); }
+.bk-card-foot {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; flex-wrap: wrap;
+  margin-top: 0.15rem; padding-top: 0.5rem; border-top: 0.5px solid var(--hairline);
+}
 
 /* Page cross-fade */
 .view-enter { animation: viewFade 220ms cubic-bezier(0.22, 1, 0.36, 1); }
@@ -2417,8 +2432,10 @@ function renderBookingsTimeline(items) {
 function renderBookingsTeam(items) {
   const wrap = document.getElementById('bk-team-wrap');
   if (!wrap) return;
-  const borderCol = { confirmed: 'var(--blue)', pending_deposit: 'var(--orange)', completed: 'var(--green)', cancelled: 'var(--label-tertiary)', no_show: 'var(--red)' };
   const byStaff = {};
+  const staffMeta = {};
+  (state.staff || []).forEach(s => { if (s.name) staffMeta[s.name] = s.specialty || s.role || ''; });
+
   items.forEach(b => {
     const key = b.staff_name || 'Unassigned';
     if (!byStaff[key]) byStaff[key] = { items: [], revenue: 0 };
@@ -2428,35 +2445,54 @@ function renderBookingsTeam(items) {
     }
   });
 
-  wrap.innerHTML = Object.entries(byStaff).map(([staffName, grp]) => `
+  const avatarTones = ['', 'bk-avatar-purple', 'bk-avatar-green'];
+  const getInitials = (name) => {
+    const parts = String(name || 'U').trim().split(/\s+/).filter(Boolean);
+    return (parts.length >= 2 ? (parts[0][0] + parts[parts.length - 1][0]) : parts[0].slice(0, 2)).toUpperCase();
+  };
+
+  wrap.innerHTML = Object.entries(byStaff).map(([staffName, grp], idx) => {
+    const subLine = [staffMeta[staffName], grp.revenue > 0 ? formatCurrency(grp.revenue) : ''].filter(Boolean).join(' · ');
+    return `
     <div class="bk-lane">
       <div class="bk-lane-head">
-        <div style="display:flex;align-items:center;gap:0.55rem">
-          <div class="bk-avatar" style="width:30px;height:30px;font-size:0.75rem">${escHtml(staffName[0].toUpperCase())}</div>
-          <div>
-            <strong style="font-size:0.9rem;display:block;line-height:1.15">${escHtml(staffName)}</strong>
-            <span class="t-caption t-num">${grp.items.length} ${grp.items.length === 1 ? 'slot' : 'slots'}${grp.revenue > 0 ? ` · ${formatCurrency(grp.revenue)}` : ''}</span>
+        <div style="display:flex;align-items:center;gap:0.6rem;min-width:0">
+          <div class="bk-avatar ${avatarTones[idx % avatarTones.length]}" style="width:32px;height:32px;font-size:0.74rem">${escHtml(getInitials(staffName))}</div>
+          <div style="min-width:0">
+            <strong style="font-size:0.88rem;display:block;line-height:1.2;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(staffName)}</strong>
+            ${subLine ? `<span class="t-caption t-num" style="display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escHtml(subLine)}</span>` : ''}
           </div>
         </div>
+        <span class="pill" style="background:var(--blue-soft);color:var(--blue)">${grp.items.length} ${grp.items.length === 1 ? 'slot' : 'slots'}</span>
       </div>
-      ${grp.items.map(b => `
-        <div onclick="showBookingDetail('${b.id}')" class="bk-lane-card" style="border-left-color:${borderCol[b.status] || 'var(--blue)'}">
-          <div style="display:flex;justify-content:space-between;align-items:center;gap:0.4rem">
-            <span class="t-caption t-num" style="font-weight:700;color:var(--label)">${formatTime(b.starts_at)} · ${formatDate(b.starts_at).replace(/ \d{4}$/, '')}</span>
+      ${grp.items.map(b => {
+        const durTxt = b.duration_minutes ? `${b.duration_minutes} min` : '';
+        const hasFoot = !!(b.utr_reference || b.status === 'pending_deposit' || b.status === 'confirmed');
+        return `
+        <div onclick="showBookingDetail('${b.id}')" class="bk-lane-card ${b.status === 'pending_deposit' ? 'pending' : ''}">
+          <div class="bk-card-row">
+            <span class="t-caption t-num" style="display:inline-flex;align-items:center;gap:6px;font-weight:600;color:var(--label-secondary)">
+              <span class="bk-dot ${escHtml(b.status)}"></span>
+              ${formatTime(b.starts_at)} · ${formatDate(b.starts_at).replace(/ \d{4}$/, '')}
+            </span>
             ${statusPill(b.status)}
           </div>
-          <div style="font-weight:700;font-size:0.9rem;margin-top:4px">${escHtml(b.customer_name || 'Walk-in')}</div>
-          <div class="t-caption" style="display:flex;justify-content:space-between;gap:0.4rem;margin-top:2px">
-            <span>${escHtml(b.service_name || '—')}</span>
-            <strong class="t-num" style="color:var(--label)">${b.service_price_paise != null ? formatCurrency(b.service_price_paise) : ''}</strong>
+          <div class="bk-card-row">
+            <span style="font-weight:700;font-size:0.92rem;letter-spacing:-0.012em;color:var(--label)">${escHtml(b.customer_name || 'Walk-in')}</span>
+            <span class="t-num" style="font-weight:700;font-size:0.85rem;color:var(--label)">${b.service_price_paise != null ? formatCurrency(b.service_price_paise) : ''}</span>
           </div>
-          ${b.utr_reference ? `<div style="margin-top:5px">${bookingUtrPillHtml(b)}</div>` : ''}
-          ${(b.status === 'pending_deposit' || b.status === 'confirmed') ? `
-            <div style="display:flex;gap:0.35rem;margin-top:0.55rem" onclick="event.stopPropagation()">
-              ${bookingPrimaryActionHtml(b)}
+          <div class="t-caption" style="color:var(--label-secondary)">
+            ${escHtml(b.service_name || '—')}${durTxt ? ` · ${escHtml(durTxt)}` : ''}
+          </div>
+          ${hasFoot ? `
+            <div class="bk-card-foot" onclick="event.stopPropagation()">
+              <div>${bookingUtrPillHtml(b)}</div>
+              <div style="display:inline-flex;gap:0.35rem;margin-left:auto">${bookingPrimaryActionHtml(b)}</div>
             </div>` : ''}
-        </div>`).join('')}
-    </div>`).join('');
+        </div>`;
+      }).join('')}
+    </div>`;
+  }).join('');
 }
 
 function renderBookingsTable(items) {
